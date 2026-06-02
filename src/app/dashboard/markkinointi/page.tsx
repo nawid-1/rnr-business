@@ -59,7 +59,7 @@ export default function MarkkinointiPage() {
       return;
     }
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/auth/meta/callback`);
-    const scope = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging,instagram_manage_basic,instagram_content_publish,instagram_manage_messages,instagram_manage_comments";
+    const scope = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging,instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_messages,instagram_manage_insights";
     window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
   }
 
