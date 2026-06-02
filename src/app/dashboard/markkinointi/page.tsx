@@ -17,7 +17,7 @@ import {
   AlertCircle,
   Sparkles,
 } from "lucide-react";
-import { supabase, type SocialAccount, type Post, type Message } from "@/lib/supabase";
+import type { SocialAccount, Post, Message } from "@/lib/supabase";
 
 type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
 
@@ -37,14 +37,15 @@ export default function MarkkinointiPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [{ data: acc }, { data: p }, { data: m }] = await Promise.all([
-      supabase.from("social_accounts").select("*").order("created_at", { ascending: false }),
-      supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(20),
-      supabase.from("messages").select("*").order("received_at", { ascending: false }).limit(30),
-    ]);
-    setAccounts(acc || []);
-    setPosts(p || []);
-    setMessages(m || []);
+    try {
+      const res = await fetch("/api/marketing");
+      const data = await res.json();
+      setAccounts(data.accounts || []);
+      setPosts(data.posts || []);
+      setMessages(data.messages || []);
+    } catch {
+      // ignore
+    }
     setLoading(false);
   }
 
@@ -52,19 +53,16 @@ export default function MarkkinointiPage() {
   const igAccount = accounts.find((a) => a.platform === "instagram");
   const unreadMessages = messages.filter((m) => !m.is_read).length;
 
-  function connectMeta(platform: "facebook" | "instagram") {
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-    if (!appId) {
-      alert("Meta App ID puuttuu. Lisää se .env.local tiedostoon.");
-      return;
-    }
-    const redirectUri = encodeURIComponent(`${window.location.origin}/api/auth/meta/callback`);
-    const scope = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging";
-    window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+  function connectMeta() {
+    window.location.href = "/api/auth/meta/login";
   }
 
   async function markAsRead(messageId: string) {
-    await supabase.from("messages").update({ is_read: true }).eq("id", messageId);
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark_read", messageId }),
+    });
     setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, is_read: true } : m));
   }
 
@@ -151,7 +149,7 @@ export default function MarkkinointiPage() {
               </div>
             ) : (
               <button
-                onClick={() => connectMeta("facebook")}
+                onClick={() => connectMeta()}
                 className="w-full border border-blue-200 text-blue-600 rounded-lg py-2 text-sm hover:bg-blue-50 transition-colors"
               >
                 Yhdistä Facebook
@@ -187,7 +185,7 @@ export default function MarkkinointiPage() {
               </div>
             ) : (
               <button
-                onClick={() => connectMeta("instagram")}
+                onClick={() => connectMeta()}
                 className="w-full border border-purple-200 text-purple-600 rounded-lg py-2 text-sm hover:bg-purple-50 transition-colors"
               >
                 Yhdistä Instagram
@@ -363,16 +361,15 @@ export default function MarkkinointiPage() {
               <button
                 onClick={async () => {
                   if (!newPost.content.trim()) return;
-                  const platforms = newPost.platform === "both" ? ["facebook", "instagram"] : [newPost.platform];
-                  for (const platform of platforms) {
-                    const account = accounts.find((a) => a.platform === platform);
-                    await supabase.from("posts").insert({
-                      social_account_id: account?.id || null,
-                      platform,
+                  await fetch("/api/marketing", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "create_post",
                       content: newPost.content,
-                      status: "draft",
-                    });
-                  }
+                      platform: newPost.platform,
+                    }),
+                  });
                   setShowNewPost(false);
                   setNewPost({ content: "", platform: "both" });
                   fetchData();
