@@ -1,21 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+const APP_URL = "https://rnr-business-sgzu.vercel.app";
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
 
+  console.log("Meta callback called, code:", code ? "present" : "missing", "error:", error);
+
   if (error || !code) {
-    return NextResponse.redirect(
-      new URL("/dashboard/markkinointi?error=meta_auth_failed", request.url)
-    );
+    console.error("Meta callback error:", error);
+    return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?error=meta_auth_failed`);
   }
 
   try {
     const appId = process.env.NEXT_PUBLIC_META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
-    const redirectUri = `${new URL(request.url).origin}/api/auth/meta/callback`;
+    const redirectUri = `${APP_URL}/api/auth/meta/callback`;
+
+    console.log("Using App ID:", appId ? "present" : "MISSING");
+    console.log("Using App Secret:", appSecret ? "present" : "MISSING");
 
     // Vaihdetaan code access tokeniksi
     const tokenRes = await fetch(
@@ -23,8 +29,9 @@ export async function GET(request: NextRequest) {
     );
     const tokenData = await tokenRes.json();
 
+    console.log("Token response:", JSON.stringify(tokenData));
     if (!tokenData.access_token) {
-      throw new Error("Token exchange failed");
+      throw new Error(`Token exchange failed: ${JSON.stringify(tokenData)}`);
     }
 
     // Haetaan käyttäjän tiedot
@@ -84,13 +91,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.redirect(
-      new URL("/dashboard/markkinointi?success=true", request.url)
-    );
+    console.log("Facebook connection saved successfully");
+    return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?success=true`);
   } catch (err) {
     console.error("Meta auth error:", err);
-    return NextResponse.redirect(
-      new URL("/dashboard/markkinointi?error=meta_auth_failed", request.url)
-    );
+    return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?error=meta_auth_failed`);
   }
 }
