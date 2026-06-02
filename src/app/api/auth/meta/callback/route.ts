@@ -23,82 +23,97 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID || process.env.META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
     const redirectUri = `${APP_URL}/api/auth/meta/callback`;
 
-    await log("env_check", {
-      appId: appId ? "present" : "MISSING",
-      appSecret: appSecret ? "present" : "MISSING",
-    });
-
-    // Vaihdetaan code access tokeniksi
+    // 1. Vaihdetaan code access tokeniksi
     const tokenRes = await fetch(
       `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`
     );
     const tokenData = await tokenRes.json();
-    await log("token_response", tokenData);
-
     if (!tokenData.access_token) {
+      await log("token_failed", tokenData);
       return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?error=token_failed`);
     }
 
-    // Haetaan pitkäkestoinen token
+    // 2. Pitkäkestoinen token
     const longTokenRes = await fetch(
       `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${tokenData.access_token}`
     );
     const longTokenData = await longTokenRes.json();
-    const longToken = longTokenData.access_token || tokenData.access_token;
+    const userToken = longTokenData.access_token || tokenData.access_token;
 
-    // Haetaan Facebook Pages
+    // 3. Kerätään sivu-ID:t. Yritetään ensin /me/accounts, sitten granular scopes.
+    const pageIds = new Set<string>();
+
     const pagesRes = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${longToken}`
+      `https://graph.facebook.com/v18.0/me/accounts?fields=id&limit=100&access_token=${userToken}`
     );
     const pagesData = await pagesRes.json();
-    await log("pages_response", pagesData);
+    (pagesData.data || []).forEach((p: { id: string }) => pageIds.add(p.id));
 
-    const page = pagesData.data?.[0];
+    // Facebook Login for Business: sivut näkyvät granular_scopes target_ids -kentässä
+    const appToken = `${appId}|${appSecret}`;
+    const debugRes = await fetch(
+      `https://graph.facebook.com/v18.0/debug_token?input_token=${userToken}&access_token=${appToken}`
+    );
+    const debugData = await debugRes.json();
+    const granular = debugData.data?.granular_scopes || [];
+    for (const g of granular) {
+      (g.target_ids || []).forEach((id: string) => pageIds.add(id));
+    }
 
-    if (!page) {
+    await log("page_ids", { ids: Array.from(pageIds) });
+
+    if (pageIds.size === 0) {
       return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?error=no_page`);
     }
 
-    // Tallennetaan Facebook-tili
-    const { error: fbError } = await supabase.from("social_accounts").upsert({
-      platform: "facebook",
-      account_name: page.name,
-      account_id: page.id,
-      access_token: page.access_token,
-      page_id: page.id,
-      page_name: page.name,
-      is_active: true,
-    }, { onConflict: "platform" });
-    await log("facebook_save", { error: fbError, page_name: page.name });
-
-    // Haetaan Instagram Business tili
-    const igRes = await fetch(
-      `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
-    );
-    const igData = await igRes.json();
-    await log("instagram_response", igData);
-
-    if (igData.instagram_business_account?.id) {
-      const igId = igData.instagram_business_account.id;
-      const igInfoRes = await fetch(
-        `https://graph.facebook.com/v18.0/${igId}?fields=id,username&access_token=${page.access_token}`
+    // 4. Haetaan jokaisen sivun tiedot + page access token
+    let savedFacebook = false;
+    for (const pageId of pageIds) {
+      const pageRes = await fetch(
+        `https://graph.facebook.com/v18.0/${pageId}?fields=id,name,access_token,instagram_business_account&access_token=${userToken}`
       );
-      const igInfo = await igInfoRes.json();
+      const page = await pageRes.json();
+      if (!page.access_token) continue;
 
-      const { error: igError } = await supabase.from("social_accounts").upsert({
-        platform: "instagram",
-        account_name: igInfo.username || igId,
-        account_id: igId,
+      // Tallennetaan Facebook-sivu
+      await supabase.from("social_accounts").upsert({
+        platform: "facebook",
+        account_name: page.name,
+        account_id: page.id,
         access_token: page.access_token,
         page_id: page.id,
         page_name: page.name,
         is_active: true,
       }, { onConflict: "platform" });
-      await log("instagram_save", { error: igError, username: igInfo.username });
+      savedFacebook = true;
+      await log("facebook_saved", { page_name: page.name, page_id: page.id });
+
+      // Instagram Business -tili jos linkitetty
+      if (page.instagram_business_account?.id) {
+        const igId = page.instagram_business_account.id;
+        const igInfoRes = await fetch(
+          `https://graph.facebook.com/v18.0/${igId}?fields=id,username&access_token=${page.access_token}`
+        );
+        const igInfo = await igInfoRes.json();
+        await supabase.from("social_accounts").upsert({
+          platform: "instagram",
+          account_name: igInfo.username || igId,
+          account_id: igId,
+          access_token: page.access_token,
+          page_id: page.id,
+          page_name: page.name,
+          is_active: true,
+        }, { onConflict: "platform" });
+        await log("instagram_saved", { username: igInfo.username, ig_id: igId });
+      }
+    }
+
+    if (!savedFacebook) {
+      return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?error=no_page_token`);
     }
 
     return NextResponse.redirect(`${APP_URL}/dashboard/markkinointi?success=true`);
