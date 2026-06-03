@@ -28,8 +28,28 @@ export default function MarkkinointiPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewPost, setShowNewPost] = useState(false);
-  const [newPost, setNewPost] = useState({ content: "", platform: "both" });
+  const [newPost, setNewPost] = useState({ content: "", platform: "both", image_url: "" });
   const [aiPrompt, setAiPrompt] = useState("");
+  const [publishing, setPublishing] = useState<string | null>(null);
+
+  async function publishPost(postId: string) {
+    setPublishing(postId);
+    try {
+      const res = await fetch("/api/marketing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "publish_post", postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("Julkaisu epäonnistui: " + (data.error || "tuntematon virhe"));
+      }
+      await fetchData();
+    } catch (e) {
+      alert("Julkaisu epäonnistui: " + String(e));
+    }
+    setPublishing(null);
+  }
 
   useEffect(() => {
     fetchData();
@@ -247,16 +267,34 @@ export default function MarkkinointiPage() {
                       {statusIcon(post.status)}
                       <span className="text-xs text-zinc-400 capitalize">{post.platform}</span>
                       <span className="text-xs text-zinc-300">·</span>
+                      <span className="text-xs text-zinc-400 capitalize">{post.status}</span>
+                      <span className="text-xs text-zinc-300">·</span>
                       <span className="text-xs text-zinc-400">
                         {new Date(post.created_at).toLocaleDateString("fi-FI")}
                       </span>
                     </div>
                     <p className="text-sm text-zinc-700">{post.content}</p>
+                    {post.image_url && (
+                      <p className="text-xs text-zinc-400 mt-1 truncate">🖼 {post.image_url}</p>
+                    )}
                   </div>
-                  <div className="flex gap-4 text-xs text-zinc-400 shrink-0">
-                    <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{post.likes_count}</span>
-                    <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{post.comments_count}</span>
-                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{post.reach}</span>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    {post.status === "published" ? (
+                      <div className="flex gap-4 text-xs text-zinc-400">
+                        <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{post.likes_count}</span>
+                        <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{post.comments_count}</span>
+                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{post.reach}</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => publishPost(post.id)}
+                        disabled={publishing === post.id}
+                        className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50"
+                      >
+                        <Send className="w-3 h-3" />
+                        {publishing === post.id ? "Julkaistaan..." : "Julkaise"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -362,6 +400,17 @@ export default function MarkkinointiPage() {
               className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 mb-4"
             />
 
+            <input
+              type="url"
+              value={newPost.image_url}
+              onChange={(e) => setNewPost((p) => ({ ...p, image_url: e.target.value }))}
+              placeholder="Kuvan URL (pakollinen Instagramille)"
+              className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 mb-2"
+            />
+            <p className="text-xs text-zinc-400 mb-4">
+              ℹ️ Instagram vaatii aina kuvan. Facebook toimii myös pelkällä tekstillä.
+            </p>
+
             <div className="flex gap-2 mb-4">
               {["both", "facebook", "instagram"].map((p) => (
                 <button
@@ -395,10 +444,11 @@ export default function MarkkinointiPage() {
                       action: "create_post",
                       content: newPost.content,
                       platform: newPost.platform,
+                      image_url: newPost.image_url,
                     }),
                   });
                   setShowNewPost(false);
-                  setNewPost({ content: "", platform: "both" });
+                  setNewPost({ content: "", platform: "both", image_url: "" });
                   fetchData();
                   setTab("postaukset");
                 }}
