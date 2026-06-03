@@ -5,16 +5,19 @@ export const dynamic = "force-dynamic";
 
 // GET: kaikki markkinointidata
 export async function GET() {
-  const [{ data: accounts }, { data: posts }, { data: messages }] = await Promise.all([
-    supabase.from("social_accounts").select("*").order("created_at", { ascending: false }),
-    supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(20),
-    supabase.from("messages").select("*").order("received_at", { ascending: false }).limit(30),
-  ]);
+  const [{ data: accounts }, { data: posts }, { data: messages }, { data: analytics }] =
+    await Promise.all([
+      supabase.from("social_accounts").select("*").order("created_at", { ascending: false }),
+      supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(20),
+      supabase.from("messages").select("*").order("received_at", { ascending: false }).limit(30),
+      supabase.from("analytics").select("*").order("date", { ascending: false }).limit(60),
+    ]);
 
   return NextResponse.json({
     accounts: accounts || [],
     posts: posts || [],
     messages: messages || [],
+    analytics: analytics || [],
   });
 }
 
@@ -93,7 +96,105 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (body.action === "refresh_analytics") {
+    const { data: accounts } = await supabase.from("social_accounts").select("*");
+    const today = new Date().toISOString().slice(0, 10);
+    const results: Record<string, unknown> = {};
+
+    for (const account of accounts || []) {
+      try {
+        const stats = await fetchAccountStats(account);
+        await supabase.from("analytics").upsert(
+          {
+            social_account_id: account.id,
+            platform: account.platform,
+            date: today,
+            followers_count: stats.followers,
+            total_likes: stats.likes,
+            total_comments: stats.comments,
+          },
+          { onConflict: "social_account_id,date" }
+        );
+        results[account.platform] = stats;
+      } catch (err) {
+        results[account.platform] = { error: String(err) };
+      }
+    }
+
+    // Päivitä julkaistujen postausten tykkäykset/kommentit
+    const { data: published } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("status", "published")
+      .not("platform_post_id", "is", null);
+
+    for (const post of published || []) {
+      const account = (accounts || []).find((a) => a.platform === post.platform);
+      if (!account) continue;
+      try {
+        const s = await fetchPostStats(post, account);
+        await supabase
+          .from("posts")
+          .update({ likes_count: s.likes, comments_count: s.comments })
+          .eq("id", post.id);
+      } catch {
+        // ohita yksittäisen postauksen virhe
+      }
+    }
+
+    return NextResponse.json({ ok: true, results });
+  }
+
   return NextResponse.json({ error: "unknown action" }, { status: 400 });
+}
+
+// --- Analytiikan haku ---
+
+async function fetchAccountStats(account: AccountRow): Promise<{
+  followers: number;
+  likes: number;
+  comments: number;
+}> {
+  if (account.platform === "facebook") {
+    const pageId = account.page_id || account.account_id;
+    const res = await fetch(
+      `https://graph.facebook.com/v18.0/${pageId}?fields=followers_count,fan_count&access_token=${account.access_token}`
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    return { followers: data.followers_count ?? data.fan_count ?? 0, likes: 0, comments: 0 };
+  }
+  // Instagram
+  const res = await fetch(
+    `https://graph.instagram.com/v21.0/${account.account_id}?fields=followers_count,media_count&access_token=${account.access_token}`
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return { followers: data.followers_count ?? 0, likes: 0, comments: 0 };
+}
+
+async function fetchPostStats(
+  post: { platform: string; platform_post_id: string },
+  account: AccountRow
+): Promise<{ likes: number; comments: number }> {
+  if (post.platform === "facebook") {
+    const res = await fetch(
+      `https://graph.facebook.com/v18.0/${post.platform_post_id}?fields=likes.summary(true),comments.summary(true)&access_token=${account.access_token}`
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    return {
+      likes: data.likes?.summary?.total_count ?? 0,
+      comments: data.comments?.summary?.total_count ?? 0,
+    };
+  }
+  // Instagram media
+  const res = await fetch(
+    `https://graph.instagram.com/v21.0/${post.platform_post_id}?fields=like_count,comments_count&access_token=${account.access_token}`
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return { likes: data.like_count ?? 0, comments: data.comments_count ?? 0 };
 }
 
 // --- Julkaisu some-kanaviin ---

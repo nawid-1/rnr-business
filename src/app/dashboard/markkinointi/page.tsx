@@ -19,6 +19,15 @@ import {
 } from "lucide-react";
 import type { SocialAccount, Post, Message } from "@/lib/supabase";
 
+type AnalyticsRow = {
+  id: string;
+  platform: string;
+  date: string;
+  followers_count: number;
+  total_likes: number;
+  total_comments: number;
+};
+
 type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
 
 export default function MarkkinointiPage() {
@@ -26,7 +35,24 @@ export default function MarkkinointiPage() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsRow[]>([]);
+  const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  async function refreshAnalytics() {
+    setRefreshingAnalytics(true);
+    try {
+      await fetch("/api/marketing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "refresh_analytics" }),
+      });
+      await fetchData();
+    } catch {
+      // ignore
+    }
+    setRefreshingAnalytics(false);
+  }
   const [showNewPost, setShowNewPost] = useState(false);
   const [newPost, setNewPost] = useState({ content: "", platform: "both", image_url: "" });
   const [aiPrompt, setAiPrompt] = useState("");
@@ -63,6 +89,7 @@ export default function MarkkinointiPage() {
       setAccounts(data.accounts || []);
       setPosts(data.posts || []);
       setMessages(data.messages || []);
+      setAnalytics(data.analytics || []);
     } catch {
       // ignore
     }
@@ -351,9 +378,82 @@ export default function MarkkinointiPage() {
 
       {/* ANALYTIIKKA */}
       {tab === "analytiikka" && (
-        <div className="bg-white rounded-xl p-12 text-center border border-zinc-100">
-          <BarChart2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <p className="text-zinc-400 text-sm">Analytiikka näkyy kun some-kanavat on yhdistetty</p>
+        <div className="space-y-4">
+          {accounts.length === 0 ? (
+            <div className="bg-white rounded-xl p-12 text-center border border-zinc-100">
+              <BarChart2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-zinc-400 text-sm">Yhdistä some-kanavat nähdäksesi analytiikan</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-end">
+                <button
+                  onClick={refreshAnalytics}
+                  disabled={refreshingAnalytics}
+                  className="flex items-center gap-2 bg-rose-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-rose-600 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshingAnalytics ? "animate-spin" : ""}`} />
+                  {refreshingAnalytics ? "Päivitetään..." : "Päivitä luvut"}
+                </button>
+              </div>
+
+              {/* Seuraajat per kanava */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {accounts.map((acc) => {
+                  const latest = analytics
+                    .filter((a) => a.platform === acc.platform)
+                    .sort((a, b) => b.date.localeCompare(a.date))[0];
+                  const isFb = acc.platform === "facebook";
+                  return (
+                    <div key={acc.id} className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
+                          {isFb ? <Share2 className="w-5 h-5 text-white" /> : <Camera className="w-5 h-5 text-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-zinc-900 capitalize">{acc.platform}</p>
+                          <p className="text-xs text-zinc-400">{isFb ? acc.page_name : "@" + acc.account_name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <span className="text-3xl font-bold text-zinc-900">
+                          {latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}
+                        </span>
+                        <span className="text-sm text-zinc-500 mb-1">seuraajaa</span>
+                      </div>
+                      {latest && (
+                        <p className="text-xs text-zinc-400 mt-1">
+                          Päivitetty {new Date(latest.date).toLocaleDateString("fi-FI")}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Postausten yhteenveto */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                  <p className="text-2xl font-bold text-zinc-900">{posts.filter((p) => p.status === "published").length}</p>
+                  <p className="text-sm text-zinc-500 mt-1">Julkaistua</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                  <p className="text-2xl font-bold text-zinc-900">{posts.reduce((s, p) => s + (p.likes_count || 0), 0)}</p>
+                  <p className="text-sm text-zinc-500 mt-1">Tykkäystä</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                  <p className="text-2xl font-bold text-zinc-900">{posts.reduce((s, p) => s + (p.comments_count || 0), 0)}</p>
+                  <p className="text-sm text-zinc-500 mt-1">Kommenttia</p>
+                </div>
+              </div>
+
+              {analytics.length === 0 && (
+                <p className="text-center text-sm text-zinc-400 py-4">
+                  Klikkaa &quot;Päivitä luvut&quot; hakeaksesi tilastot Metasta.
+                </p>
+              )}
+            </>
+          )}
         </div>
       )}
 
