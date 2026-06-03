@@ -6,13 +6,24 @@ Tähän on koottu mitä on tehty, jotta muistat asetukset jatkossa.
 
 Projekti: **rnr-business-sgzu** → Settings → Environment Variables
 
-| Muuttuja | Selitys | Salainen? |
-|----------|---------|-----------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabasen osoite | ei |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabasen julkinen avain | ei |
-| `NEXT_PUBLIC_META_APP_ID` | Facebook App ID | ei |
-| `META_APP_SECRET` | Facebook App Secret | 🔒 kyllä |
-| `INSTAGRAM_APP_SECRET` | Instagram App Secret | 🔒 kyllä |
+Selitykset:
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabasen osoite
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabasen julkinen avain
+- `NEXT_PUBLIC_META_APP_ID` — Facebook App ID
+- `META_APP_SECRET` — Facebook App Secret (🔒 salainen)
+- `INSTAGRAM_APP_SECRET` — Instagram App Secret (🔒 salainen)
+
+Koodissa käytetyt muuttujat (päivittyy automaattisesti):
+
+<!-- AUTO:env-vars -->
+- `INSTAGRAM_APP_ID`
+- `INSTAGRAM_APP_SECRET`
+- `META_APP_ID`
+- `META_APP_SECRET`
+- `NEXT_PUBLIC_META_APP_ID`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+<!-- /AUTO:env-vars -->
 
 > ⚠️ **Huom:** env-muuttujan lisäyksen tai muutoksen jälkeen pitää tehdä **Redeploy**, jotta se tulee voimaan.
 

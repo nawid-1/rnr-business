@@ -27,15 +27,17 @@ Vercel (palvelin / API-reitit)
 
 Kaikki **salaiset avaimet ovat palvelimella**, ei selaimessa — tämä on turvallista.
 
-## Tärkeät API-reitit
+## API-reitit
 
-| Reitti | Tehtävä |
-|--------|---------|
-| `/api/auth/meta/login` | Aloittaa Facebook-kirjautumisen |
-| `/api/auth/meta/callback` | Tallentaa Facebook-sivun |
-| `/api/auth/instagram/login` | Aloittaa Instagram-kirjautumisen (ilman Facebookia) |
-| `/api/auth/instagram/callback` | Tallentaa Instagram-tilin |
-| `/api/marketing` | Hakee/päivittää kanavat, postaukset, viestit |
+> Tämä lista päivittyy automaattisesti commitin yhteydessä.
+
+<!-- AUTO:api-routes -->
+- `/api/auth/instagram/callback`
+- `/api/auth/instagram/login`
+- `/api/auth/meta/callback`
+- `/api/auth/meta/login`
+- `/api/marketing`
+<!-- /AUTO:api-routes -->
 
 ## Tietokantataulut (Supabase)
 

@@ -1,0 +1,25 @@
+#!/bin/sh
+# RNR Business — päivittää dokumentaation automaattisesti ennen committia.
+# Asennus: git config core.hooksPath .githooks
+
+echo "[docs] Päivitetään dokumentaatio..."
+
+# Etsi python
+if command -v python >/dev/null 2>&1; then
+  PY=python
+elif command -v python3 >/dev/null 2>&1; then
+  PY=python3
+else
+  echo "[docs] Python ei löydy — ohitetaan dokumentaation päivitys."
+  exit 0
+fi
+
+"$PY" scripts/generate_docs.py || {
+  echo "[docs] Generaattori epäonnistui — committia jatketaan silti."
+  exit 0
+}
+
+# Lisää päivittyneet dokumentit committiin
+git add docs/ 2>/dev/null
+
+exit 0
