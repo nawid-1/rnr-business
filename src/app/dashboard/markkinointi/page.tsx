@@ -84,6 +84,17 @@ export default function MarkkinointiPage() {
     fetchData();
   }, []);
 
+  // Päivitä analytiikka automaattisesti kun välilehti avataan ensimmäisen kerran.
+  // Näin luvut ovat aina tuoreita ilman että käyttäjän tarvitsee klikata mitään.
+  const [autoRefreshed, setAutoRefreshed] = useState(false);
+  useEffect(() => {
+    if (tab === "analytiikka" && !autoRefreshed && accounts.length > 0) {
+      setAutoRefreshed(true);
+      refreshAnalytics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, accounts.length]);
+
   async function fetchData() {
     setLoading(true);
     try {
