@@ -45,5 +45,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (body.action === "disconnect") {
+    // Poistetaan kanavan yhteys (platform: "facebook" tai "instagram")
+    await supabase.from("social_accounts").delete().eq("platform", body.platform);
+    return NextResponse.json({ ok: true });
+  }
+
   return NextResponse.json({ error: "unknown action" }, { status: 400 });
 }

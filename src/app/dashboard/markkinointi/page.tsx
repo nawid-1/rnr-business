@@ -61,6 +61,17 @@ export default function MarkkinointiPage() {
     window.location.href = "/api/auth/instagram/login";
   }
 
+  async function disconnect(platform: "facebook" | "instagram") {
+    const name = platform === "facebook" ? "Facebook" : "Instagram";
+    if (!confirm(`Haluatko varmasti katkaista ${name}-yhteyden?`)) return;
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "disconnect", platform }),
+    });
+    fetchData();
+  }
+
   async function markAsRead(messageId: string) {
     await fetch("/api/marketing", {
       method: "POST",
@@ -141,7 +152,7 @@ export default function MarkkinointiPage() {
               </div>
             </div>
             {fbAccount ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Tili</span>
                   <span className="font-medium">{fbAccount.account_name}</span>
@@ -150,6 +161,12 @@ export default function MarkkinointiPage() {
                   <span className="text-zinc-500">Status</span>
                   <span className="text-green-500 font-medium">Aktiivinen</span>
                 </div>
+                <button
+                  onClick={() => disconnect("facebook")}
+                  className="w-full border border-red-200 text-red-600 rounded-lg py-2 text-sm hover:bg-red-50 transition-colors mt-2"
+                >
+                  Katkaise yhteys
+                </button>
               </div>
             ) : (
               <button
@@ -177,7 +194,7 @@ export default function MarkkinointiPage() {
               </div>
             </div>
             {igAccount ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Tili</span>
                   <span className="font-medium">@{igAccount.account_name}</span>
@@ -186,6 +203,12 @@ export default function MarkkinointiPage() {
                   <span className="text-zinc-500">Status</span>
                   <span className="text-green-500 font-medium">Aktiivinen</span>
                 </div>
+                <button
+                  onClick={() => disconnect("instagram")}
+                  className="w-full border border-red-200 text-red-600 rounded-lg py-2 text-sm hover:bg-red-50 transition-colors mt-2"
+                >
+                  Katkaise yhteys
+                </button>
               </div>
             ) : (
               <button
