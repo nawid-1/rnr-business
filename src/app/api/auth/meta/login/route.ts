@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   const redirectUri = encodeURIComponent(`${APP_URL}/api/auth/meta/callback`);
-  const scope = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging";
+  const scope = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging,instagram_basic,instagram_content_publish,instagram_manage_comments,instagram_manage_messages";
   const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
 
   return NextResponse.redirect(authUrl);

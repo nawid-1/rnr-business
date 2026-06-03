@@ -57,6 +57,10 @@ export default function MarkkinointiPage() {
     window.location.href = "/api/auth/meta/login";
   }
 
+  function connectInstagram() {
+    window.location.href = "/api/auth/instagram/login";
+  }
+
   async function markAsRead(messageId: string) {
     await fetch("/api/marketing", {
       method: "POST",
@@ -185,7 +189,7 @@ export default function MarkkinointiPage() {
               </div>
             ) : (
               <button
-                onClick={() => connectMeta()}
+                onClick={() => connectInstagram()}
                 className="w-full border border-purple-200 text-purple-600 rounded-lg py-2 text-sm hover:bg-purple-50 transition-colors"
               >
                 Yhdistä Instagram
