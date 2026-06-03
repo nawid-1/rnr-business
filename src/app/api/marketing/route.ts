@@ -173,17 +173,30 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     if (pageData.error) throw new Error(pageData.error.message);
     const followers = pageData.followers_count ?? pageData.fan_count ?? 0;
 
-    // HUOM: pages_read_engagement (tykkäykset/kommentit/reach) vaatii Meta App
-    // Review -hyväksynnän. Kehitystilassa niitä ei saa → palautetaan null,
-    // jotta UI näyttää "–" eikä harhaanjohtavaa 0.
-    const totalLikes = null;
-    const totalComments = null;
-
-    // Julkaisujen määrä: Facebookin Graph API ei anna kehitystilassa luotettavaa,
-    // sivulla näkyvää kokonaismäärää (summary on katkaistu, published_posts ei
-    // sisällä kaikkia sisältötyyppejä, tarkka luku vaatii App Review'n).
-    // Näytetään rehellisesti "–" (null) kunnes App Review on tehty.
-    const mediaCount = null;
+    // Tykkäykset, kommentit ja julkaisumäärä: yritetään hakea sivun julkaisut
+    // engagement-tiedoilla. Tämä vaatii pages_read_engagement-luvan, joka TOIMII
+    // kehitystilassa omalle sivulle tuoreella tokenilla. Jos lupa puuttuu,
+    // jätetään null → UI näyttää "–" (ei harhaanjohtavaa nollaa).
+    let totalLikes: number | null = null;
+    let totalComments: number | null = null;
+    let mediaCount: number | null = null;
+    try {
+      const postsRes = await fetch(
+        `https://graph.facebook.com/v18.0/${pageId}/published_posts?fields=likes.summary(true),comments.summary(true)&limit=50&access_token=${token}`
+      );
+      const postsData = await postsRes.json();
+      if (!postsData.error && Array.isArray(postsData.data)) {
+        let likes = 0;
+        let comments = 0;
+        for (const p of postsData.data) {
+          likes += p.likes?.summary?.total_count ?? 0;
+          comments += p.comments?.summary?.total_count ?? 0;
+        }
+        totalLikes = likes;
+        totalComments = comments;
+        mediaCount = postsData.data.length;
+      }
+    } catch { /* lupa puuttuu → jätetään null */ }
 
     // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
     let reach = 0;
