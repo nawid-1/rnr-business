@@ -112,6 +112,9 @@ export async function POST(request: Request) {
             followers_count: stats.followers,
             total_likes: stats.likes,
             total_comments: stats.comments,
+            media_count: stats.media_count,
+            total_reach: stats.reach,
+            total_impressions: stats.impressions,
           },
           { onConflict: "social_account_id,date" }
         );
@@ -154,23 +157,97 @@ async function fetchAccountStats(account: AccountRow): Promise<{
   followers: number;
   likes: number;
   comments: number;
+  media_count: number;
+  reach: number;
+  impressions: number;
 }> {
   if (account.platform === "facebook") {
     const pageId = account.page_id || account.account_id;
-    const res = await fetch(
-      `https://graph.facebook.com/v18.0/${pageId}?fields=followers_count,fan_count&access_token=${account.access_token}`
+    const token = account.access_token;
+
+    // Hae seuraajat
+    const pageRes = await fetch(
+      `https://graph.facebook.com/v18.0/${pageId}?fields=followers_count,fan_count&access_token=${token}`
     );
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
-    return { followers: data.followers_count ?? data.fan_count ?? 0, likes: 0, comments: 0 };
+    const pageData = await pageRes.json();
+    if (pageData.error) throw new Error(pageData.error.message);
+    const followers = pageData.followers_count ?? pageData.fan_count ?? 0;
+
+    // Hae viimeisimmät postaukset ja laske tykkäykset/kommentit
+    const postsRes = await fetch(
+      `https://graph.facebook.com/v18.0/${pageId}/posts?fields=likes.summary(true),comments.summary(true)&limit=25&access_token=${token}`
+    );
+    const postsData = await postsRes.json();
+    let totalLikes = 0;
+    let totalComments = 0;
+    const mediaCount = postsData.data?.length ?? 0;
+    for (const p of postsData.data || []) {
+      totalLikes += p.likes?.summary?.total_count ?? 0;
+      totalComments += p.comments?.summary?.total_count ?? 0;
+    }
+
+    // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
+    let reach = 0;
+    let impressions = 0;
+    try {
+      const insightsRes = await fetch(
+        `https://graph.facebook.com/v18.0/${pageId}/insights?metric=page_impressions,page_reach&period=days_28&access_token=${token}`
+      );
+      const insightsData = await insightsRes.json();
+      if (!insightsData.error) {
+        for (const metric of insightsData.data || []) {
+          const val = metric.values?.[metric.values.length - 1]?.value ?? 0;
+          if (metric.name === "page_reach") reach = val;
+          if (metric.name === "page_impressions") impressions = val;
+        }
+      }
+    } catch { /* ei pakollinen */ }
+
+    return { followers, likes: totalLikes, comments: totalComments, media_count: mediaCount, reach, impressions };
   }
+
   // Instagram
-  const res = await fetch(
-    `https://graph.instagram.com/v21.0/${account.account_id}?fields=followers_count,media_count&access_token=${account.access_token}`
+  const igId = account.account_id;
+  const token = account.access_token;
+
+  const profileRes = await fetch(
+    `https://graph.instagram.com/v21.0/${igId}?fields=followers_count,media_count&access_token=${token}`
   );
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return { followers: data.followers_count ?? 0, likes: 0, comments: 0 };
+  const profileData = await profileRes.json();
+  if (profileData.error) throw new Error(profileData.error.message);
+  const followers = profileData.followers_count ?? 0;
+  const mediaCount = profileData.media_count ?? 0;
+
+  // Hae viimeisimmät mediat ja laske tykkäykset/kommentit
+  const mediaRes = await fetch(
+    `https://graph.instagram.com/v21.0/${igId}/media?fields=like_count,comments_count&limit=25&access_token=${token}`
+  );
+  const mediaData = await mediaRes.json();
+  let totalLikes = 0;
+  let totalComments = 0;
+  for (const m of mediaData.data || []) {
+    totalLikes += m.like_count ?? 0;
+    totalComments += m.comments_count ?? 0;
+  }
+
+  // Hae reach/impressions (vaatii instagram_insights permission)
+  let reach = 0;
+  let impressions = 0;
+  try {
+    const insRes = await fetch(
+      `https://graph.instagram.com/v21.0/${igId}/insights?metric=reach,impressions&period=days_28&access_token=${token}`
+    );
+    const insData = await insRes.json();
+    if (!insData.error) {
+      for (const metric of insData.data || []) {
+        const val = metric.values?.[metric.values.length - 1]?.value ?? 0;
+        if (metric.name === "reach") reach = val;
+        if (metric.name === "impressions") impressions = val;
+      }
+    }
+  } catch { /* ei pakollinen */ }
+
+  return { followers, likes: totalLikes, comments: totalComments, media_count: mediaCount, reach, impressions };
 }
 
 async function fetchPostStats(

@@ -26,6 +26,9 @@ type AnalyticsRow = {
   followers_count: number;
   total_likes: number;
   total_comments: number;
+  media_count: number;
+  total_reach: number;
+  total_impressions: number;
 };
 
 type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
@@ -431,26 +434,100 @@ export default function MarkkinointiPage() {
                 })}
               </div>
 
-              {/* Postausten yhteenveto */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                  <p className="text-2xl font-bold text-zinc-900">{posts.filter((p) => p.status === "published").length}</p>
-                  <p className="text-sm text-zinc-500 mt-1">Julkaistua</p>
+              {/* Yhteenveto-luvut */}
+              {analytics.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                  <p className="text-sm text-amber-700">
+                    Klikkaa <strong>Päivitä luvut</strong> hakeaksesi tilastot Metasta.
+                  </p>
                 </div>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                  <p className="text-2xl font-bold text-zinc-900">{posts.reduce((s, p) => s + (p.likes_count || 0), 0)}</p>
-                  <p className="text-sm text-zinc-500 mt-1">Tykkäystä</p>
-                </div>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                  <p className="text-2xl font-bold text-zinc-900">{posts.reduce((s, p) => s + (p.comments_count || 0), 0)}</p>
-                  <p className="text-sm text-zinc-500 mt-1">Kommenttia</p>
-                </div>
-              </div>
+              ) : (
+                <>
+                  {/* Sitoutuminen (25 viimeisintä postausta) */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Sitoutuminen (25 viimeisintä postausta)</h3>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                        <p className="text-2xl font-bold text-zinc-900">
+                          {analytics.reduce((s, a) => s + (a.media_count || 0), 0).toLocaleString("fi-FI")}
+                        </p>
+                        <p className="text-sm text-zinc-500 mt-1">Julkaisuja</p>
+                      </div>
+                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                        <p className="text-2xl font-bold text-rose-500">
+                          {analytics.reduce((s, a) => s + (a.total_likes || 0), 0).toLocaleString("fi-FI")}
+                        </p>
+                        <p className="text-sm text-zinc-500 mt-1">Tykkäystä</p>
+                      </div>
+                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                        <p className="text-2xl font-bold text-zinc-900">
+                          {analytics.reduce((s, a) => s + (a.total_comments || 0), 0).toLocaleString("fi-FI")}
+                        </p>
+                        <p className="text-sm text-zinc-500 mt-1">Kommenttia</p>
+                      </div>
+                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                        <p className="text-2xl font-bold text-blue-500">
+                          {analytics.reduce((s, a) => s + (a.total_reach || 0), 0).toLocaleString("fi-FI")}
+                        </p>
+                        <p className="text-sm text-zinc-500 mt-1">Tavoitettu (28pv)</p>
+                      </div>
+                    </div>
+                  </div>
 
-              {analytics.length === 0 && (
-                <p className="text-center text-sm text-zinc-400 py-4">
-                  Klikkaa &quot;Päivitä luvut&quot; hakeaksesi tilastot Metasta.
-                </p>
+                  {/* Per-alusta erittely */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Erittely alustoittain</h3>
+                    <div className="bg-white rounded-xl shadow-sm border border-zinc-100 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-zinc-100">
+                            <th className="text-left px-5 py-3 text-zinc-500 font-medium">Alusta</th>
+                            <th className="text-right px-5 py-3 text-zinc-500 font-medium">Seuraajat</th>
+                            <th className="text-right px-5 py-3 text-zinc-500 font-medium">Julkaisuja</th>
+                            <th className="text-right px-5 py-3 text-zinc-500 font-medium">Tykkäyksiä</th>
+                            <th className="text-right px-5 py-3 text-zinc-500 font-medium">Kommentteja</th>
+                            <th className="text-right px-5 py-3 text-zinc-500 font-medium">Tavoitettu</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accounts.map((acc) => {
+                            const latest = analytics
+                              .filter((a) => a.platform === acc.platform)
+                              .sort((a, b) => b.date.localeCompare(a.date))[0];
+                            const isFb = acc.platform === "facebook";
+                            return (
+                              <tr key={acc.id} className="border-b border-zinc-50 last:border-0">
+                                <td className="px-5 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-6 h-6 rounded flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
+                                      {isFb ? <Share2 className="w-3 h-3 text-white" /> : <Camera className="w-3 h-3 text-white" />}
+                                    </div>
+                                    <span className="font-medium text-zinc-900 capitalize">{acc.platform}</span>
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4 text-right font-semibold text-zinc-900">
+                                  {latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}
+                                </td>
+                                <td className="px-5 py-4 text-right text-zinc-600">
+                                  {latest?.media_count?.toLocaleString("fi-FI") ?? "–"}
+                                </td>
+                                <td className="px-5 py-4 text-right text-rose-500 font-medium">
+                                  {latest ? latest.total_likes.toLocaleString("fi-FI") : "–"}
+                                </td>
+                                <td className="px-5 py-4 text-right text-zinc-600">
+                                  {latest ? latest.total_comments.toLocaleString("fi-FI") : "–"}
+                                </td>
+                                <td className="px-5 py-4 text-right text-blue-500 font-medium">
+                                  {latest?.total_reach ? latest.total_reach.toLocaleString("fi-FI") : "–"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
               )}
             </>
           )}
