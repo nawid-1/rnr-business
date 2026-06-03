@@ -179,16 +179,24 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     const totalLikes = null;
     const totalComments = null;
 
-    // Julkaisujen määrä SAADAAN ilman engagement-lupaa (published_posts summary).
+    // Julkaisujen määrä: summary.total_count on Metassa epäluotettava (katkaistu
+    // ~25:een), joten lasketaan postaukset oikeasti sivuttamalla. Cap 1000 ettei
+    // pääty silmukkaan jättisivuilla.
     let mediaCount: number | null = null;
     try {
-      const countRes = await fetch(
-        `https://graph.facebook.com/v18.0/${pageId}/published_posts?limit=0&summary=total_count&access_token=${token}`
-      );
-      const countData = await countRes.json();
-      if (!countData.error) {
-        mediaCount = countData.summary?.total_count ?? null;
+      let count = 0;
+      let url: string | null =
+        `https://graph.facebook.com/v18.0/${pageId}/published_posts?fields=id&limit=100&access_token=${token}`;
+      let pages = 0;
+      while (url && pages < 10) {
+        const r: Response = await fetch(url);
+        const d: { data?: unknown[]; paging?: { next?: string }; error?: unknown } = await r.json();
+        if (d.error) break;
+        count += (d.data || []).length;
+        url = d.paging?.next ?? null;
+        pages++;
       }
+      mediaCount = count;
     } catch { /* ei pakollinen */ }
 
     // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
