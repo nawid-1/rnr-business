@@ -174,22 +174,26 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     const followers = pageData.followers_count ?? pageData.fan_count ?? 0;
 
     // Hae viimeisimmät postaukset ja laske tykkäykset/kommentit
-    // Kokeillaan ensin published_posts, sitten posts
-    let postsData: { data?: Array<{ likes?: { summary?: { total_count?: number } }; comments?: { summary?: { total_count?: number } } }>; error?: { message: string } } = {};
-    for (const endpoint of ["published_posts", "posts"]) {
+    let totalLikes = 0;
+    let totalComments = 0;
+    let mediaCount = 0;
+    for (const endpoint of ["published_posts", "posts", "feed"]) {
       const postsRes = await fetch(
         `https://graph.facebook.com/v18.0/${pageId}/${endpoint}?fields=likes.summary(true),comments.summary(true)&limit=25&access_token=${token}`
       );
-      postsData = await postsRes.json();
-      console.log(`[FB stats] ${endpoint}:`, JSON.stringify(postsData).slice(0, 300));
-      if (!postsData.error) break;
-    }
-    let totalLikes = 0;
-    let totalComments = 0;
-    const mediaCount = postsData.data?.length ?? 0;
-    for (const p of postsData.data || []) {
-      totalLikes += p.likes?.summary?.total_count ?? 0;
-      totalComments += p.comments?.summary?.total_count ?? 0;
+      const postsData = await postsRes.json();
+      // Tallenna debug-lokiin
+      await supabase.from("debug_logs").insert({
+        step: `fb_${endpoint}`,
+        data: { raw: JSON.stringify(postsData).slice(0, 500) }
+      }).then(() => {});
+      if (postsData.error) continue; // kokeile seuraavaa endpointia
+      mediaCount = postsData.data?.length ?? 0;
+      for (const p of postsData.data || []) {
+        totalLikes += p.likes?.summary?.total_count ?? 0;
+        totalComments += p.comments?.summary?.total_count ?? 0;
+      }
+      break; // onnistui
     }
 
     // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
