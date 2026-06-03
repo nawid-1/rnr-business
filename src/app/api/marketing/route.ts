@@ -173,12 +173,23 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     if (pageData.error) throw new Error(pageData.error.message);
     const followers = pageData.followers_count ?? pageData.fan_count ?? 0;
 
-    // HUOM: pages_read_engagement vaatii Meta App Review -hyväksynnän.
-    // Kehitystilassa postausten engagement ei ole käytettävissä.
-    // Palautetaan null jotta UI näyttää "–" eikä harhaanjohtavaa 0.
+    // HUOM: pages_read_engagement (tykkäykset/kommentit/reach) vaatii Meta App
+    // Review -hyväksynnän. Kehitystilassa niitä ei saa → palautetaan null,
+    // jotta UI näyttää "–" eikä harhaanjohtavaa 0.
     const totalLikes = null;
     const totalComments = null;
-    const mediaCount = null;
+
+    // Julkaisujen määrä SAADAAN ilman engagement-lupaa (published_posts summary).
+    let mediaCount: number | null = null;
+    try {
+      const countRes = await fetch(
+        `https://graph.facebook.com/v18.0/${pageId}/published_posts?limit=0&summary=total_count&access_token=${token}`
+      );
+      const countData = await countRes.json();
+      if (!countData.error) {
+        mediaCount = countData.summary?.total_count ?? null;
+      }
+    } catch { /* ei pakollinen */ }
 
     // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
     let reach = 0;
@@ -197,7 +208,7 @@ async function fetchAccountStats(account: AccountRow): Promise<{
       }
     } catch { /* ei pakollinen */ }
 
-    return { followers, likes: totalLikes as null, comments: totalComments as null, media_count: mediaCount as null, reach, impressions };
+    return { followers, likes: totalLikes, comments: totalComments, media_count: mediaCount, reach, impressions };
   }
 
   // Instagram
