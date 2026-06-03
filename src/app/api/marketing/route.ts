@@ -155,9 +155,9 @@ export async function POST(request: Request) {
 
 async function fetchAccountStats(account: AccountRow): Promise<{
   followers: number;
-  likes: number;
-  comments: number;
-  media_count: number;
+  likes: number | null;
+  comments: number | null;
+  media_count: number | null;
   reach: number;
   impressions: number;
 }> {
@@ -173,43 +173,12 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     if (pageData.error) throw new Error(pageData.error.message);
     const followers = pageData.followers_count ?? pageData.fan_count ?? 0;
 
-    // Hae postausten engagement
-    // Kokeillaan ensin reactions (laajempi kuin likes), sitten likes
-    let totalLikes = 0;
-    let totalComments = 0;
-    let mediaCount = 0;
-
-    // Yritys 1: published_posts reactions-kenttällä
-    try {
-      const postsRes = await fetch(
-        `https://graph.facebook.com/v18.0/${pageId}/published_posts?fields=reactions.summary(true),comments.summary(true)&limit=25&access_token=${token}`
-      );
-      const postsData = await postsRes.json();
-      if (!postsData.error && postsData.data?.length > 0) {
-        mediaCount = postsData.data.length;
-        for (const p of postsData.data) {
-          totalLikes += p.reactions?.summary?.total_count ?? 0;
-          totalComments += p.comments?.summary?.total_count ?? 0;
-        }
-      } else if (!postsData.error && Array.isArray(postsData.data)) {
-        // published_posts toimii mutta ei postauksia — sivu on tyhjä
-        mediaCount = 0;
-      }
-      // Tallenna debug Supabaseen
-      await supabase.from("debug_logs").insert({
-        step: "fb_posts_result",
-        data: {
-          endpoint: "published_posts",
-          error: postsData.error ?? null,
-          count: postsData.data?.length ?? "no_data",
-        }
-      });
-    } catch (e) {
-      await supabase.from("debug_logs").insert({
-        step: "fb_posts_exception",
-        data: { message: String(e) }
-      });
-    }
+    // HUOM: pages_read_engagement vaatii Meta App Review -hyväksynnän.
+    // Kehitystilassa postausten engagement ei ole käytettävissä.
+    // Palautetaan null jotta UI näyttää "–" eikä harhaanjohtavaa 0.
+    const totalLikes = null;
+    const totalComments = null;
+    const mediaCount = null;
 
     // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
     let reach = 0;
@@ -228,7 +197,7 @@ async function fetchAccountStats(account: AccountRow): Promise<{
       }
     } catch { /* ei pakollinen */ }
 
-    return { followers, likes: totalLikes, comments: totalComments, media_count: mediaCount, reach, impressions };
+    return { followers, likes: totalLikes as null, comments: totalComments as null, media_count: mediaCount as null, reach, impressions };
   }
 
   // Instagram

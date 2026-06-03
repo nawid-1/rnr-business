@@ -447,30 +447,40 @@ export default function MarkkinointiPage() {
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Sitoutuminen (25 viimeisintä postausta)</h3>
                     <div className="grid grid-cols-4 gap-4">
-                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                        <p className="text-2xl font-bold text-zinc-900">
-                          {analytics.reduce((s, a) => s + (a.media_count || 0), 0).toLocaleString("fi-FI")}
-                        </p>
-                        <p className="text-sm text-zinc-500 mt-1">Julkaisuja</p>
-                      </div>
-                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                        <p className="text-2xl font-bold text-rose-500">
-                          {analytics.reduce((s, a) => s + (a.total_likes || 0), 0).toLocaleString("fi-FI")}
-                        </p>
-                        <p className="text-sm text-zinc-500 mt-1">Tykkäystä</p>
-                      </div>
-                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                        <p className="text-2xl font-bold text-zinc-900">
-                          {analytics.reduce((s, a) => s + (a.total_comments || 0), 0).toLocaleString("fi-FI")}
-                        </p>
-                        <p className="text-sm text-zinc-500 mt-1">Kommenttia</p>
-                      </div>
-                      <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
-                        <p className="text-2xl font-bold text-blue-500">
-                          {analytics.reduce((s, a) => s + (a.total_reach || 0), 0).toLocaleString("fi-FI")}
-                        </p>
-                        <p className="text-sm text-zinc-500 mt-1">Tavoitettu (28pv)</p>
-                      </div>
+                      {(() => {
+                        const hasMedia = analytics.some(a => a.media_count !== null);
+                        const hasLikes = analytics.some(a => a.total_likes !== null);
+                        const hasComments = analytics.some(a => a.total_comments !== null);
+                        const hasReach = analytics.some(a => a.total_reach > 0);
+                        return (
+                          <>
+                            <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                              <p className="text-2xl font-bold text-zinc-900">
+                                {hasMedia ? analytics.reduce((s, a) => s + (a.media_count ?? 0), 0).toLocaleString("fi-FI") : "–"}
+                              </p>
+                              <p className="text-sm text-zinc-500 mt-1">Julkaisuja (Instagram)</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                              <p className="text-2xl font-bold text-rose-500">
+                                {hasLikes ? analytics.reduce((s, a) => s + (a.total_likes ?? 0), 0).toLocaleString("fi-FI") : "–"}
+                              </p>
+                              <p className="text-sm text-zinc-500 mt-1">Tykkäystä</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                              <p className="text-2xl font-bold text-zinc-900">
+                                {hasComments ? analytics.reduce((s, a) => s + (a.total_comments ?? 0), 0).toLocaleString("fi-FI") : "–"}
+                              </p>
+                              <p className="text-sm text-zinc-500 mt-1">Kommenttia</p>
+                            </div>
+                            <div className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100 text-center">
+                              <p className="text-2xl font-bold text-blue-500">
+                                {hasReach ? analytics.reduce((s, a) => s + (a.total_reach ?? 0), 0).toLocaleString("fi-FI") : "–"}
+                              </p>
+                              <p className="text-sm text-zinc-500 mt-1">Tavoitettu (28pv)</p>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -509,13 +519,13 @@ export default function MarkkinointiPage() {
                                   {latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}
                                 </td>
                                 <td className="px-5 py-4 text-right text-zinc-600">
-                                  {latest?.media_count?.toLocaleString("fi-FI") ?? "–"}
+                                  {latest?.media_count != null ? latest.media_count.toLocaleString("fi-FI") : "–"}
                                 </td>
                                 <td className="px-5 py-4 text-right text-rose-500 font-medium">
-                                  {latest ? latest.total_likes.toLocaleString("fi-FI") : "–"}
+                                  {latest?.total_likes != null ? latest.total_likes.toLocaleString("fi-FI") : "–"}
                                 </td>
                                 <td className="px-5 py-4 text-right text-zinc-600">
-                                  {latest ? latest.total_comments.toLocaleString("fi-FI") : "–"}
+                                  {latest?.total_comments != null ? latest.total_comments.toLocaleString("fi-FI") : "–"}
                                 </td>
                                 <td className="px-5 py-4 text-right text-blue-500 font-medium">
                                   {latest?.total_reach ? latest.total_reach.toLocaleString("fi-FI") : "–"}
