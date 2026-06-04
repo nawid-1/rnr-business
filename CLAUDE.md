@@ -38,6 +38,11 @@ Kaikki salaiset avaimet ovat **Vercelin Environment Variables** -kohdassa, ei ko
 - Instagram ei tullut Facebook-sivun kautta → vaihdettiin erilliseen **Instagram Login** -tuotteeseen (eri App ID/Secret, eri scope-nimet `instagram_business_*`).
 - Instagram vaatii AINA kuvan, Facebook ei.
 - Meta-sovellus on **kehitystilassa** → toimii vain testaajille. Myyntiä varten tarvitaan App Review.
+- **Facebook engagement (tykkäykset/kommentit/reach) EI toimi kehitystilassa**, vaikka `pages_read_engagement` on myönnetty (todistettu debug_tokenilla). Vaatii App Review'n. ÄLÄ yritä uudelleen — näytä "–". Vain seuraajat (followers_count) saadaan.
+- **Älä lisää `business_management`/`read_insights` FB OAuth-scopeen** → aiheuttaa "Feature Unavailable". Toimiva setti: `pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging`.
+- Instagram Login -token on vaihdettava **pitkäkestoiseksi** (ig_exchange_token), muuten vanhenee ~1 vrk. Jos IG näyttää väärän nimen/"–", token vanheni → yhdistä IG uudelleen.
+- Jos Metan dashboard pyytää "Account confirmation" (epätavallinen aktiivisuus), se estää Facebook Loginin kunnes käyttäjä vahvistaa sähköpostin+puhelimen. Ei koodiongelma.
+- Analytiikka päivittyy automaattisesti: välilehden avaus (client) + päivittäinen Vercel cron (`/api/cron/refresh-analytics`, `vercel.json`).
 
 ## Env-muuttujat (Vercel: rnr-business-sgzu)
 
