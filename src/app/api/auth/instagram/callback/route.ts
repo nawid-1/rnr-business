@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
       `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${appSecret}&access_token=${shortToken}`
     );
     const longData = await longRes.json();
+    await log("ig_long_token", { ok: !!longData.access_token, expires_in: longData.expires_in, error: longData.error });
     const longToken = longData.access_token || shortToken;
 
     // 3. Haetaan tilin tiedot
@@ -63,7 +64,8 @@ export async function GET(request: NextRequest) {
     await log("ig_me", me);
 
     const igUserId = me.user_id || tokenData.user_id;
-    const username = me.username || "instagram";
+    // Älä tallenna harhaanjohtavaa "instagram"-oletusta — käytä user_id:tä jos nimi puuttuu.
+    const username = me.username || String(igUserId || "tuntematon");
 
     // 4. Tallennetaan
     const { error: igError } = await supabase.from("social_accounts").upsert({
