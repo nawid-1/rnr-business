@@ -2,7 +2,7 @@
 
 Yritystoiminnan hallinta-alusta. Tämä kansio sisältää koko projektin dokumentaation.
 
-> Päivitetty: 4.6.2026 · Sovellus: https://rnr-business-sgzu.vercel.app
+> Päivitetty: 8.6.2026 · Sovellus: https://rnr-business-sgzu.vercel.app
 
 ## Sisällys
 

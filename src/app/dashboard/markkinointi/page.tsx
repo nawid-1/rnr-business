@@ -31,6 +31,15 @@ type AnalyticsRow = {
   total_impressions: number;
 };
 
+type FeedItem = {
+  platform: "facebook" | "instagram";
+  id: string;
+  message: string;
+  created_time: string;
+  image: string | null;
+  permalink: string | null;
+};
+
 type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
 
 export default function MarkkinointiPage() {
@@ -41,6 +50,22 @@ export default function MarkkinointiPage() {
   const [analytics, setAnalytics] = useState<AnalyticsRow[]>([]);
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedLoaded, setFeedLoaded] = useState(false);
+
+  async function fetchFeed() {
+    setFeedLoading(true);
+    try {
+      const res = await fetch("/api/marketing/feed");
+      const data = await res.json();
+      setFeedItems(data.items || []);
+    } catch {
+      // ignore
+    }
+    setFeedLoading(false);
+    setFeedLoaded(true);
+  }
 
   async function refreshAnalytics() {
     setRefreshingAnalytics(true);
@@ -91,6 +116,9 @@ export default function MarkkinointiPage() {
     if (tab === "analytiikka" && !autoRefreshed && accounts.length > 0) {
       setAutoRefreshed(true);
       refreshAnalytics();
+    }
+    if (tab === "postaukset" && !feedLoaded && accounts.length > 0) {
+      fetchFeed();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, accounts.length]);
@@ -286,6 +314,65 @@ export default function MarkkinointiPage() {
       {/* POSTAUKSET */}
       {tab === "postaukset" && (
         <div className="space-y-3">
+          {/* Some-kanavien oikeat julkaisut (haetaan suoraan Facebookista & Instagramista) */}
+          {accounts.length > 0 && (
+            <div className="bg-white rounded-xl p-5 border border-zinc-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-zinc-900 text-sm">Julkaisut some-kanavilla</h2>
+                <button
+                  onClick={fetchFeed}
+                  disabled={feedLoading}
+                  className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${feedLoading ? "animate-spin" : ""}`} />
+                  Päivitä
+                </button>
+              </div>
+              {feedLoading && feedItems.length === 0 ? (
+                <p className="text-center text-sm text-zinc-400 py-6">Ladataan julkaisuja…</p>
+              ) : feedItems.length === 0 ? (
+                <p className="text-center text-sm text-zinc-400 py-6">Ei julkaisuja kanavilla</p>
+              ) : (
+                <div className="space-y-2">
+                  {feedItems.map((item) => {
+                    const isFb = item.platform === "facebook";
+                    return (
+                      <a
+                        key={item.id}
+                        href={item.permalink || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-100"
+                      >
+                        {item.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                            <ImageIcon className="w-5 h-5 text-zinc-300" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={`w-4 h-4 rounded flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
+                              {isFb ? <Share2 className="w-2.5 h-2.5 text-white" /> : <Camera className="w-2.5 h-2.5 text-white" />}
+                            </span>
+                            <span className="text-xs text-zinc-400">
+                              {item.created_time ? new Date(item.created_time).toLocaleDateString("fi-FI") : ""}
+                            </span>
+                          </div>
+                          <p className="text-sm text-zinc-700 truncate">
+                            {item.message || "(ei tekstiä)"}
+                          </p>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {loading ? (
             <div className="text-center py-12 text-zinc-400">Ladataan...</div>
           ) : posts.length === 0 ? (

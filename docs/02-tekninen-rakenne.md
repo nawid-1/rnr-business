@@ -37,6 +37,7 @@ Kaikki **salaiset avaimet ovat palvelimella**, ei selaimessa — tämä on turva
 - `/api/auth/meta/callback`
 - `/api/auth/meta/login`
 - `/api/cron/refresh-analytics`
+- `/api/marketing/feed`
 - `/api/marketing`
 <!-- /AUTO:api-routes -->
 
