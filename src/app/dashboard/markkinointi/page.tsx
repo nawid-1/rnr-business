@@ -404,7 +404,7 @@ export default function MarkkinointiPage() {
               {feedLoading && feedItems.length === 0 ? (
                 <div className="text-center py-8 text-zinc-400 text-sm">Ladataan julkaisuja…</div>
               ) : (
-                <div className="space-y-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                   {accounts.map((acc) => {
                     const isFb = acc.platform === "facebook";
                     const channelItems = feedItems.filter((i) => i.platform === acc.platform);
