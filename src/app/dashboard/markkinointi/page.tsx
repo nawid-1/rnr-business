@@ -56,6 +56,7 @@ export default function MarkkinointiPage() {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedLoaded, setFeedLoaded] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<string>("");
 
   async function fetchFeed() {
     setFeedLoading(true);
@@ -145,6 +146,7 @@ export default function MarkkinointiPage() {
   const igAccount = accounts.find((a) => a.platform === "instagram");
   const draftPosts = posts.filter((p) => p.status !== "published");
   const unreadMessages = messages.filter((m) => !m.is_read).length;
+  const activeChannel = selectedChannel || accounts[0]?.platform || "";
 
   function connectMeta() {
     window.location.href = "/api/auth/meta/login";
@@ -404,24 +406,67 @@ export default function MarkkinointiPage() {
               {feedLoading && feedItems.length === 0 ? (
                 <div className="text-center py-8 text-zinc-400 text-sm">Ladataan julkaisuja…</div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-                  {accounts.map((acc) => {
-                    const isFb = acc.platform === "facebook";
-                    const channelItems = feedItems.filter((i) => i.platform === acc.platform);
-                    return (
-                      <div key={acc.id}>
-                        {/* Kanavan otsikko */}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
-                            {isFb ? <Share2 className="w-3.5 h-3.5 text-white" /> : <Camera className="w-3.5 h-3.5 text-white" />}
+                <div>
+                  {/* Kanavavalitsin (välilehdet) */}
+                  <div className="flex gap-1 mb-4 bg-zinc-100 p-1 rounded-lg w-fit">
+                    {accounts.map((acc) => {
+                      const isFb = acc.platform === "facebook";
+                      const active = activeChannel === acc.platform;
+                      return (
+                        <button
+                          key={acc.id}
+                          onClick={() => setSelectedChannel(acc.platform)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                            active ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+                          }`}
+                        >
+                          <span className={`w-4 h-4 rounded flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
+                            {isFb ? <Share2 className="w-2.5 h-2.5 text-white" /> : <Camera className="w-2.5 h-2.5 text-white" />}
                           </span>
-                          <span className="text-sm font-medium text-zinc-900 capitalize">{acc.platform}</span>
-                          <span className="text-xs text-zinc-400">{isFb ? acc.page_name : "@" + acc.account_name}</span>
-                          <span className="text-xs text-zinc-300">· {channelItems.length} julkaisua</span>
+                          <span className="capitalize">{acc.platform}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Valitun kanavan sisältö */}
+                  {(() => {
+                    const acc = accounts.find((a) => a.platform === activeChannel);
+                    if (!acc) return null;
+                    const isFb = acc.platform === "facebook";
+                    const channelItems = feedItems.filter((i) => i.platform === activeChannel);
+                    const latest = analytics
+                      .filter((a) => a.platform === activeChannel)
+                      .sort((a, b) => b.date.localeCompare(a.date))[0];
+                    const totalLikes = channelItems.reduce((s, i) => s + (i.likes ?? 0), 0);
+                    const totalComments = channelItems.reduce((s, i) => s + (i.comments ?? 0), 0);
+                    const hasEngagement = channelItems.some((i) => i.likes !== null);
+
+                    return (
+                      <div>
+                        {/* Tilastot valitulle kanavalle */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                          <div className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm text-center">
+                            <p className="text-xl font-bold text-zinc-900">{latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">Seuraajaa</p>
+                          </div>
+                          <div className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm text-center">
+                            <p className="text-xl font-bold text-zinc-900">{channelItems.length}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">Julkaisua</p>
+                          </div>
+                          <div className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm text-center">
+                            <p className="text-xl font-bold text-zinc-900">{hasEngagement ? totalLikes : "–"}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">Tykkäystä</p>
+                          </div>
+                          <div className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm text-center">
+                            <p className="text-xl font-bold text-zinc-900">{hasEngagement ? totalComments : "–"}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">Kommenttia</p>
+                          </div>
                         </div>
 
+                        {/* Julkaisut valitulta kanavalta */}
                         {channelItems.length === 0 ? (
-                          <div className="bg-white rounded-xl p-6 text-center border border-dashed border-zinc-200 text-sm text-zinc-400">
+                          <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200 text-sm text-zinc-400">
                             Ei julkaisuja tällä kanavalla
                           </div>
                         ) : (
@@ -464,9 +509,14 @@ export default function MarkkinointiPage() {
                             ))}
                           </div>
                         )}
+                        {isFb && !hasEngagement && (
+                          <p className="text-xs text-zinc-400 mt-2">
+                            Facebookin tykkäykset ja kommentit avautuvat App Review -hyväksynnän jälkeen.
+                          </p>
+                        )}
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
               )}
             </section>
