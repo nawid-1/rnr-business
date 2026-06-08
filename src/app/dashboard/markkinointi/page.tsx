@@ -143,6 +143,7 @@ export default function MarkkinointiPage() {
 
   const fbAccount = accounts.find((a) => a.platform === "facebook");
   const igAccount = accounts.find((a) => a.platform === "instagram");
+  const draftPosts = posts.filter((p) => p.status !== "published");
   const unreadMessages = messages.filter((m) => !m.is_read).length;
 
   function connectMeta() {
@@ -316,27 +317,97 @@ export default function MarkkinointiPage() {
 
       {/* POSTAUKSET */}
       {tab === "postaukset" && (
-        <div className="space-y-3">
-          {/* Some-kanavien oikeat julkaisut (haetaan suoraan Facebookista & Instagramista) */}
+        <div className="space-y-8">
+          {/* OSIO 1 — Luonnokset & ajastetut (alustalla luodut, ei vielä julkaistut) */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">Luonnokset & ajastetut</h2>
+                <p className="text-xs text-zinc-400">Alustalla luodut postaukset, joita ei ole vielä julkaistu</p>
+              </div>
+              <button
+                onClick={() => setShowNewPost(true)}
+                className="flex items-center gap-1.5 text-sm text-rose-500 hover:text-rose-600"
+              >
+                <Plus className="w-4 h-4" />
+                Uusi
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-8 text-zinc-400 text-sm">Ladataan…</div>
+            ) : draftPosts.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200">
+                <ImageIcon className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                <p className="text-zinc-400 text-sm">Ei luonnoksia</p>
+                <button
+                  onClick={() => setShowNewPost(true)}
+                  className="mt-3 text-rose-500 text-sm hover:underline"
+                >
+                  Luo ensimmäinen postaus
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {draftPosts.map((post) => (
+                  <div key={post.id} className="bg-white rounded-xl p-5 border border-zinc-100 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          {statusIcon(post.status)}
+                          <span className="text-xs text-zinc-400 capitalize">{post.platform}</span>
+                          <span className="text-xs text-zinc-300">·</span>
+                          <span className="text-xs text-zinc-400">
+                            {new Date(post.created_at).toLocaleDateString("fi-FI")}
+                          </span>
+                        </div>
+                        <p className="text-sm text-zinc-700">{post.content}</p>
+                        {post.image_url && (
+                          <p className="text-xs text-zinc-400 mt-1 truncate">🖼 {post.image_url}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => publishPost(post.id)}
+                        disabled={publishing === post.id}
+                        className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        <Send className="w-3 h-3" />
+                        {publishing === post.id ? "Julkaistaan…" : "Julkaise"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* OSIO 2 — Julkaistut some-kanavilla (haetaan suoraan Facebookista & Instagramista) */}
           {accounts.length > 0 && (
-            <div className="bg-white rounded-xl p-5 border border-zinc-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-zinc-900 text-sm">Julkaisut some-kanavilla</h2>
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900">Julkaistut some-kanavilla</h2>
+                  <p className="text-xs text-zinc-400">Oikeat julkaisut Facebookista ja Instagramista, uusimmat ensin</p>
+                </div>
                 <button
                   onClick={fetchFeed}
                   disabled={feedLoading}
-                  className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-700 disabled:opacity-50"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${feedLoading ? "animate-spin" : ""}`} />
+                  <RefreshCw className={`w-4 h-4 ${feedLoading ? "animate-spin" : ""}`} />
                   Päivitä
                 </button>
               </div>
+
               {feedLoading && feedItems.length === 0 ? (
-                <p className="text-center text-sm text-zinc-400 py-6">Ladataan julkaisuja…</p>
+                <div className="text-center py-8 text-zinc-400 text-sm">Ladataan julkaisuja…</div>
               ) : feedItems.length === 0 ? (
-                <p className="text-center text-sm text-zinc-400 py-6">Ei julkaisuja kanavilla</p>
+                <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200">
+                  <ImageIcon className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                  <p className="text-zinc-400 text-sm">Ei julkaisuja kanavilla</p>
+                </div>
               ) : (
-                <div className="space-y-2">
+                <div className="bg-white rounded-xl border border-zinc-100 shadow-sm divide-y divide-zinc-50">
                   {feedItems.map((item) => {
                     const isFb = item.platform === "facebook";
                     return (
@@ -345,7 +416,7 @@ export default function MarkkinointiPage() {
                         href={item.permalink || "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-50 transition-colors border border-transparent hover:border-zinc-100"
+                        className="flex items-center gap-3 p-3 hover:bg-zinc-50 transition-colors first:rounded-t-xl last:rounded-b-xl"
                       >
                         {item.image ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -367,79 +438,23 @@ export default function MarkkinointiPage() {
                           <p className="text-sm text-zinc-700 truncate">
                             {item.message || "(ei tekstiä)"}
                           </p>
-                          <div className="flex items-center gap-4 mt-1">
-                            <span className="flex items-center gap-1 text-xs text-zinc-400">
-                              <Heart className="w-3 h-3" />
-                              {item.likes ?? "–"}
-                            </span>
-                            <span className="flex items-center gap-1 text-xs text-zinc-400">
-                              <MessageSquare className="w-3 h-3" />
-                              {item.comments ?? "–"}
-                            </span>
-                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0 pl-2">
+                          <span className="flex items-center gap-1 text-xs text-zinc-400">
+                            <Heart className="w-3 h-3" />
+                            {item.likes ?? "–"}
+                          </span>
+                          <span className="flex items-center gap-1 text-xs text-zinc-400">
+                            <MessageSquare className="w-3 h-3" />
+                            {item.comments ?? "–"}
+                          </span>
                         </div>
                       </a>
                     );
                   })}
                 </div>
               )}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center py-12 text-zinc-400">Ladataan...</div>
-          ) : posts.length === 0 ? (
-            <div className="bg-white rounded-xl p-12 text-center border border-zinc-100">
-              <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-zinc-400 text-sm">Ei postauksia vielä</p>
-              <button
-                onClick={() => setShowNewPost(true)}
-                className="mt-4 text-rose-500 text-sm hover:underline"
-              >
-                Luo ensimmäinen postaus
-              </button>
-            </div>
-          ) : (
-            posts.map((post) => (
-              <div key={post.id} className="bg-white rounded-xl p-5 border border-zinc-100 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      {statusIcon(post.status)}
-                      <span className="text-xs text-zinc-400 capitalize">{post.platform}</span>
-                      <span className="text-xs text-zinc-300">·</span>
-                      <span className="text-xs text-zinc-400 capitalize">{post.status}</span>
-                      <span className="text-xs text-zinc-300">·</span>
-                      <span className="text-xs text-zinc-400">
-                        {new Date(post.created_at).toLocaleDateString("fi-FI")}
-                      </span>
-                    </div>
-                    <p className="text-sm text-zinc-700">{post.content}</p>
-                    {post.image_url && (
-                      <p className="text-xs text-zinc-400 mt-1 truncate">🖼 {post.image_url}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    {post.status === "published" ? (
-                      <div className="flex gap-4 text-xs text-zinc-400">
-                        <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{post.likes_count}</span>
-                        <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{post.comments_count}</span>
-                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{post.reach}</span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => publishPost(post.id)}
-                        disabled={publishing === post.id}
-                        className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50"
-                      >
-                        <Send className="w-3 h-3" />
-                        {publishing === post.id ? "Julkaistaan..." : "Julkaise"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
+            </section>
           )}
         </div>
       )}
