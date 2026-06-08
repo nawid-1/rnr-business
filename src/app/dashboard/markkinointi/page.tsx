@@ -162,6 +162,8 @@ export default function MarkkinointiPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "disconnect", platform }),
     });
+    // Poista katkaistun kanavan julkaisut myös feed-listalta heti
+    setFeedItems((prev) => prev.filter((i) => i.platform !== platform));
     fetchData();
   }
 
@@ -387,7 +389,7 @@ export default function MarkkinointiPage() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h2 className="text-base font-semibold text-zinc-900">Julkaistut some-kanavilla</h2>
-                  <p className="text-xs text-zinc-400">Oikeat julkaisut Facebookista ja Instagramista, uusimmat ensin</p>
+                  <p className="text-xs text-zinc-400">Eritelty kanavittain — seuraa yhdistettyjä kanavia automaattisesti</p>
                 </div>
                 <button
                   onClick={fetchFeed}
@@ -401,55 +403,68 @@ export default function MarkkinointiPage() {
 
               {feedLoading && feedItems.length === 0 ? (
                 <div className="text-center py-8 text-zinc-400 text-sm">Ladataan julkaisuja…</div>
-              ) : feedItems.length === 0 ? (
-                <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200">
-                  <ImageIcon className="w-7 h-7 mx-auto mb-2 opacity-30" />
-                  <p className="text-zinc-400 text-sm">Ei julkaisuja kanavilla</p>
-                </div>
               ) : (
-                <div className="bg-white rounded-xl border border-zinc-100 shadow-sm divide-y divide-zinc-50">
-                  {feedItems.map((item) => {
-                    const isFb = item.platform === "facebook";
+                <div className="space-y-5">
+                  {accounts.map((acc) => {
+                    const isFb = acc.platform === "facebook";
+                    const channelItems = feedItems.filter((i) => i.platform === acc.platform);
                     return (
-                      <a
-                        key={item.id}
-                        href={item.permalink || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3 hover:bg-zinc-50 transition-colors first:rounded-t-xl last:rounded-b-xl"
-                      >
-                        {item.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                      <div key={acc.id}>
+                        {/* Kanavan otsikko */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
+                            {isFb ? <Share2 className="w-3.5 h-3.5 text-white" /> : <Camera className="w-3.5 h-3.5 text-white" />}
+                          </span>
+                          <span className="text-sm font-medium text-zinc-900 capitalize">{acc.platform}</span>
+                          <span className="text-xs text-zinc-400">{isFb ? acc.page_name : "@" + acc.account_name}</span>
+                          <span className="text-xs text-zinc-300">· {channelItems.length} julkaisua</span>
+                        </div>
+
+                        {channelItems.length === 0 ? (
+                          <div className="bg-white rounded-xl p-6 text-center border border-dashed border-zinc-200 text-sm text-zinc-400">
+                            Ei julkaisuja tällä kanavalla
+                          </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
-                            <ImageIcon className="w-5 h-5 text-zinc-300" />
+                          <div className="bg-white rounded-xl border border-zinc-100 shadow-sm divide-y divide-zinc-50">
+                            {channelItems.map((item) => (
+                              <a
+                                key={item.id}
+                                href={item.permalink || "#"}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-3 hover:bg-zinc-50 transition-colors first:rounded-t-xl last:rounded-b-xl"
+                              >
+                                {item.image ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={item.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                                    <ImageIcon className="w-5 h-5 text-zinc-300" />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-400 mb-0.5">
+                                    {item.created_time ? new Date(item.created_time).toLocaleDateString("fi-FI") : ""}
+                                  </p>
+                                  <p className="text-sm text-zinc-700 truncate">
+                                    {item.message || "(ei tekstiä)"}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-4 shrink-0 pl-2">
+                                  <span className="flex items-center gap-1 text-xs text-zinc-400">
+                                    <Heart className="w-3 h-3" />
+                                    {item.likes ?? "–"}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-xs text-zinc-400">
+                                    <MessageSquare className="w-3 h-3" />
+                                    {item.comments ?? "–"}
+                                  </span>
+                                </div>
+                              </a>
+                            ))}
                           </div>
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`w-4 h-4 rounded flex items-center justify-center ${isFb ? "bg-blue-600" : "bg-gradient-to-br from-purple-500 to-rose-500"}`}>
-                              {isFb ? <Share2 className="w-2.5 h-2.5 text-white" /> : <Camera className="w-2.5 h-2.5 text-white" />}
-                            </span>
-                            <span className="text-xs text-zinc-400">
-                              {item.created_time ? new Date(item.created_time).toLocaleDateString("fi-FI") : ""}
-                            </span>
-                          </div>
-                          <p className="text-sm text-zinc-700 truncate">
-                            {item.message || "(ei tekstiä)"}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4 shrink-0 pl-2">
-                          <span className="flex items-center gap-1 text-xs text-zinc-400">
-                            <Heart className="w-3 h-3" />
-                            {item.likes ?? "–"}
-                          </span>
-                          <span className="flex items-center gap-1 text-xs text-zinc-400">
-                            <MessageSquare className="w-3 h-3" />
-                            {item.comments ?? "–"}
-                          </span>
-                        </div>
-                      </a>
+                      </div>
                     );
                   })}
                 </div>
