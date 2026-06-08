@@ -16,6 +16,8 @@ import {
   Clock,
   AlertCircle,
   Sparkles,
+  Users,
+  Trash2,
 } from "lucide-react";
 import type { SocialAccount, Post, Message } from "@/lib/supabase";
 
@@ -43,6 +45,14 @@ type FeedItem = {
   media_type: string | null;
 };
 
+type GroupPost = {
+  id: string;
+  group_name: string;
+  content: string | null;
+  link: string | null;
+  posted_at: string | null;
+};
+
 type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
 
 export default function MarkkinointiPage() {
@@ -56,6 +66,30 @@ export default function MarkkinointiPage() {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedLoaded, setFeedLoaded] = useState(false);
+  const [groupPosts, setGroupPosts] = useState<GroupPost[]>([]);
+  const [showGroupForm, setShowGroupForm] = useState(false);
+  const [newGroupPost, setNewGroupPost] = useState({ group_name: "", content: "", link: "", posted_at: "" });
+
+  async function addGroupPost() {
+    if (!newGroupPost.group_name.trim()) return;
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add_group_post", ...newGroupPost }),
+    });
+    setNewGroupPost({ group_name: "", content: "", link: "", posted_at: "" });
+    setShowGroupForm(false);
+    fetchData();
+  }
+
+  async function deleteGroupPost(id: string) {
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_group_post", id }),
+    });
+    fetchData();
+  }
 
   async function fetchFeed() {
     setFeedLoading(true);
@@ -135,6 +169,7 @@ export default function MarkkinointiPage() {
       setPosts(data.posts || []);
       setMessages(data.messages || []);
       setAnalytics(data.analytics || []);
+      setGroupPosts(data.groupPosts || []);
     } catch {
       // ignore
     }
@@ -456,6 +491,109 @@ export default function MarkkinointiPage() {
               )}
             </section>
           )}
+
+          {/* OSIO 3 — Ryhmäjulkaisut (kirjataan käsin, koska Meta ei salli ryhmien API-lukua) */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">Ryhmäjulkaisut</h2>
+                <p className="text-xs text-zinc-400">Kirjaa käsin ryhmiin tekemäsi julkaisut — Meta ei salli niiden automaattista hakua</p>
+              </div>
+              <button
+                onClick={() => setShowGroupForm((v) => !v)}
+                className="flex items-center gap-1.5 text-sm text-rose-500 hover:text-rose-600"
+              >
+                <Plus className="w-4 h-4" />
+                Lisää
+              </button>
+            </div>
+
+            {showGroupForm && (
+              <div className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm mb-3 space-y-2">
+                <input
+                  type="text"
+                  value={newGroupPost.group_name}
+                  onChange={(e) => setNewGroupPost((p) => ({ ...p, group_name: e.target.value }))}
+                  placeholder="Ryhmän nimi *"
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <textarea
+                  value={newGroupPost.content}
+                  onChange={(e) => setNewGroupPost((p) => ({ ...p, content: e.target.value }))}
+                  placeholder="Postauksen teksti (valinnainen)"
+                  rows={2}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newGroupPost.link}
+                    onChange={(e) => setNewGroupPost((p) => ({ ...p, link: e.target.value }))}
+                    placeholder="Linkki postaukseen (valinnainen)"
+                    className="flex-1 px-3 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                  <input
+                    type="date"
+                    value={newGroupPost.posted_at}
+                    onChange={(e) => setNewGroupPost((p) => ({ ...p, posted_at: e.target.value }))}
+                    className="px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-600 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <button
+                    onClick={() => setShowGroupForm(false)}
+                    className="px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 rounded-lg"
+                  >
+                    Peruuta
+                  </button>
+                  <button
+                    onClick={addGroupPost}
+                    className="px-4 py-1.5 bg-rose-500 text-white rounded-lg text-sm hover:bg-rose-600"
+                  >
+                    Tallenna
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {groupPosts.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200">
+                <Users className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                <p className="text-zinc-400 text-sm">Ei ryhmäjulkaisuja kirjattuna</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-zinc-100 shadow-sm divide-y divide-zinc-50">
+                {groupPosts.map((gp) => (
+                  <div key={gp.id} className="flex items-start gap-3 p-4 group">
+                    <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                      <Users className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-zinc-900 truncate">{gp.group_name}</span>
+                        {gp.posted_at && (
+                          <span className="text-xs text-zinc-400">{new Date(gp.posted_at).toLocaleDateString("fi-FI")}</span>
+                        )}
+                      </div>
+                      {gp.content && <p className="text-sm text-zinc-600 mt-0.5">{gp.content}</p>}
+                      {gp.link && (
+                        <a href={gp.link} target="_blank" rel="noopener noreferrer" className="text-xs text-rose-500 hover:underline mt-0.5 inline-block">
+                          Avaa postaus →
+                        </a>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => deleteGroupPost(gp.id)}
+                      className="text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      title="Poista"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
