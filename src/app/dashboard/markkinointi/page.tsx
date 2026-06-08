@@ -16,6 +16,7 @@ import {
   Clock,
   AlertCircle,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import type { SocialAccount, Post, Message } from "@/lib/supabase";
 
@@ -89,6 +90,25 @@ export default function MarkkinointiPage() {
   const [newPost, setNewPost] = useState({ content: "", platform: "both", image_url: "" });
   const [aiPrompt, setAiPrompt] = useState("");
   const [publishing, setPublishing] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function uploadMedia(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/marketing/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        setNewPost((p) => ({ ...p, image_url: data.url }));
+      } else {
+        alert("Lataus epäonnistui: " + (data.error || "tuntematon virhe"));
+      }
+    } catch (e) {
+      alert("Lataus epäonnistui: " + String(e));
+    }
+    setUploading(false);
+  }
 
   async function publishPost(postId: string) {
     setPublishing(postId);
@@ -778,11 +798,41 @@ export default function MarkkinointiPage() {
               className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 mb-4"
             />
 
+            {/* Median lataus + esikatselu */}
+            {newPost.image_url ? (
+              <div className="relative mb-2 inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={newPost.image_url} alt="" className="w-full max-h-48 rounded-xl object-cover border border-zinc-200" />
+                <button
+                  onClick={() => setNewPost((p) => ({ ...p, image_url: "" }))}
+                  className="absolute top-2 right-2 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80"
+                  title="Poista kuva"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <label className={`flex items-center justify-center gap-2 w-full px-4 py-6 mb-2 border-2 border-dashed rounded-xl text-sm cursor-pointer transition-colors ${uploading ? "opacity-60 cursor-wait" : "border-zinc-200 text-zinc-500 hover:border-rose-300 hover:bg-rose-50/30"}`}>
+                <ImageIcon className="w-5 h-5" />
+                {uploading ? "Ladataan…" : "Lataa kuva tai video"}
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadMedia(f);
+                  }}
+                />
+              </label>
+            )}
+
             <input
               type="url"
               value={newPost.image_url}
               onChange={(e) => setNewPost((p) => ({ ...p, image_url: e.target.value }))}
-              placeholder="Kuvan URL (pakollinen Instagramille)"
+              placeholder="…tai liitä kuvan URL"
               className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 mb-2"
             />
             <p className="text-xs text-zinc-400 mb-4">

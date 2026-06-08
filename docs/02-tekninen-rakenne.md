@@ -39,6 +39,7 @@ Kaikki **salaiset avaimet ovat palvelimella**, ei selaimessa — tämä on turva
 - `/api/cron/refresh-analytics`
 - `/api/marketing/feed`
 - `/api/marketing`
+- `/api/marketing/upload`
 <!-- /AUTO:api-routes -->
 
 ## Tietokantataulut (Supabase)
