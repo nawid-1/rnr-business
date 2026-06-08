@@ -5,13 +5,12 @@ export const dynamic = "force-dynamic";
 
 // GET: kaikki markkinointidata
 export async function GET() {
-  const [{ data: accounts }, { data: posts }, { data: messages }, { data: analytics }, { data: groupPosts }] =
+  const [{ data: accounts }, { data: posts }, { data: messages }, { data: analytics }] =
     await Promise.all([
       supabase.from("social_accounts").select("*").order("created_at", { ascending: false }),
       supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("messages").select("*").order("received_at", { ascending: false }).limit(30),
       supabase.from("analytics").select("*").order("date", { ascending: false }).limit(60),
-      supabase.from("group_posts").select("*").order("posted_at", { ascending: false, nullsFirst: false }).limit(50),
     ]);
 
   return NextResponse.json({
@@ -19,7 +18,6 @@ export async function GET() {
     posts: posts || [],
     messages: messages || [],
     analytics: analytics || [],
-    groupPosts: groupPosts || [],
   });
 }
 
@@ -89,21 +87,6 @@ export async function POST(request: Request) {
 
   if (body.action === "mark_read") {
     await supabase.from("messages").update({ is_read: true }).eq("id", body.messageId);
-    return NextResponse.json({ ok: true });
-  }
-
-  if (body.action === "add_group_post") {
-    await supabase.from("group_posts").insert({
-      group_name: body.group_name,
-      content: body.content || null,
-      link: body.link || null,
-      posted_at: body.posted_at || null,
-    });
-    return NextResponse.json({ ok: true });
-  }
-
-  if (body.action === "delete_group_post") {
-    await supabase.from("group_posts").delete().eq("id", body.id);
     return NextResponse.json({ ok: true });
   }
 
