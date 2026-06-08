@@ -19,6 +19,7 @@ import {
   Trash2,
   Pencil,
   Copy,
+  X,
 } from "lucide-react";
 import type { SocialAccount, Post, Message } from "@/lib/supabase";
 
@@ -166,6 +167,14 @@ export default function MarkkinointiPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Lukitse taustan vieritys kun modaali on auki
+  useEffect(() => {
+    document.body.style.overflow = showNewPost ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showNewPost]);
 
   // Päivitä analytiikka automaattisesti kun välilehti avataan ensimmäisen kerran.
   // Näin luvut ovat aina tuoreita ilman että käyttäjän tarvitsee klikata mitään.
@@ -803,146 +812,172 @@ export default function MarkkinointiPage() {
         </div>
       )}
 
-      {/* Uusi postaus modal */}
+      {/* Uusi postaus modal — leveä, kaksipalstainen, sisäisesti vierittyvä */}
       {showNewPost && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
-            <h2 className="text-lg font-bold text-zinc-900 mb-4">{editingId ? "Muokkaa luonnosta" : "Uusi postaus"}</h2>
-
-            {/* AI-avustaja */}
-            <div className="mb-4 p-3 bg-rose-50 rounded-lg border border-rose-100">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-4 h-4 text-rose-500" />
-                <span className="text-sm font-medium text-rose-700">AI kirjoittaa puolestasi</span>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder="esim. tarjous hiustenleikkauksesta 20%"
-                  className="flex-1 px-3 py-2 text-sm border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300"
-                />
-                <button
-                  onClick={() => {
-                    setNewPost((p) => ({
-                      ...p,
-                      content: `✨ Erikoistarjous! ${aiPrompt} - Varaa aikasi nyt! 📞 Ota yhteyttä tai varaa suoraan verkossa. #RNRSalonki #Kauneus #Hyvinvointi`,
-                    }));
-                    setAiPrompt("");
-                  }}
-                  className="px-3 py-2 bg-rose-500 text-white rounded-lg text-sm hover:bg-rose-600 transition-colors"
-                >
-                  <Sparkles className="w-4 h-4" />
-                </button>
-              </div>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowNewPost(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Otsikko */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+              <h2 className="text-lg font-bold text-zinc-900">{editingId ? "Muokkaa luonnosta" : "Uusi postaus"}</h2>
+              <button onClick={() => setShowNewPost(false)} className="text-zinc-400 hover:text-zinc-700 p-1">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <textarea
-              value={newPost.content}
-              onChange={(e) => setNewPost((p) => ({ ...p, content: e.target.value }))}
-              placeholder="Kirjoita postauksen teksti..."
-              rows={5}
-              className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 mb-4"
-            />
+            {/* Sisältö — kaksi palstaa, vierittyy sisäisesti */}
+            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Vasemmalla: muokkaus */}
+              <div className="space-y-4">
+                {/* AI-avustaja */}
+                <div className="p-3 bg-rose-50 rounded-lg border border-rose-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-rose-500" />
+                    <span className="text-sm font-medium text-rose-700">AI kirjoittaa puolestasi</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="esim. tarjous hiustenleikkauksesta 20%"
+                      className="flex-1 px-3 py-2 text-sm border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300"
+                    />
+                    <button
+                      onClick={() => {
+                        setNewPost((p) => ({
+                          ...p,
+                          content: `✨ Erikoistarjous! ${aiPrompt} - Varaa aikasi nyt! 📞 Ota yhteyttä tai varaa suoraan verkossa. #RNRSalonki #Kauneus #Hyvinvointi`,
+                        }));
+                        setAiPrompt("");
+                      }}
+                      className="px-3 py-2 bg-rose-500 text-white rounded-lg text-sm hover:bg-rose-600 transition-colors"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
-            {/* Median lataus + esikatselu */}
-            {newPost.image_url ? (
-              <div className="relative mb-2 inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={newPost.image_url} alt="" className="w-full max-h-48 rounded-xl object-cover border border-zinc-200" />
-                <button
-                  onClick={() => setNewPost((p) => ({ ...p, image_url: "" }))}
-                  className="absolute top-2 right-2 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80"
-                  title="Poista kuva"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <label className={`flex items-center justify-center gap-2 w-full px-4 py-6 mb-2 border-2 border-dashed rounded-xl text-sm cursor-pointer transition-colors ${uploading ? "opacity-60 cursor-wait" : "border-zinc-200 text-zinc-500 hover:border-rose-300 hover:bg-rose-50/30"}`}>
-                <ImageIcon className="w-5 h-5" />
-                {uploading ? "Ladataan…" : "Lataa kuva tai video"}
-                <input
-                  type="file"
-                  accept="image/*,video/*"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadMedia(f);
-                  }}
+                <textarea
+                  value={newPost.content}
+                  onChange={(e) => setNewPost((p) => ({ ...p, content: e.target.value }))}
+                  placeholder="Kirjoita postauksen teksti..."
+                  rows={6}
+                  className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
-              </label>
-            )}
 
-            <input
-              type="url"
-              value={newPost.image_url}
-              onChange={(e) => setNewPost((p) => ({ ...p, image_url: e.target.value }))}
-              placeholder="…tai liitä kuvan URL"
-              className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 mb-2"
-            />
-            <p className="text-xs text-zinc-400 mb-4">
-              ℹ️ Instagram vaatii aina kuvan. Facebook toimii myös pelkällä tekstillä.
-            </p>
+                {/* Median lataus */}
+                {newPost.image_url ? (
+                  <div className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={newPost.image_url} alt="" className="w-full max-h-56 rounded-xl object-cover border border-zinc-200" />
+                    <button
+                      onClick={() => setNewPost((p) => ({ ...p, image_url: "" }))}
+                      className="absolute top-2 right-2 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80"
+                      title="Poista kuva"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className={`flex items-center justify-center gap-2 w-full px-4 py-6 border-2 border-dashed rounded-xl text-sm cursor-pointer transition-colors ${uploading ? "opacity-60 cursor-wait" : "border-zinc-200 text-zinc-500 hover:border-rose-300 hover:bg-rose-50/30"}`}>
+                    <ImageIcon className="w-5 h-5" />
+                    {uploading ? "Ladataan…" : "Lataa kuva tai video"}
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadMedia(f);
+                      }}
+                    />
+                  </label>
+                )}
 
-            <div className="flex gap-2 mb-4">
-              {["both", "facebook", "instagram"].map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setNewPost((prev) => ({ ...prev, platform: p }))}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    newPost.platform === p
-                      ? "bg-rose-500 text-white"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-                  }`}
-                >
-                  {p === "both" ? "Molemmat" : p === "facebook" ? "Facebook" : "Instagram"}
-                </button>
-              ))}
-            </div>
+                <input
+                  type="url"
+                  value={newPost.image_url}
+                  onChange={(e) => setNewPost((p) => ({ ...p, image_url: e.target.value }))}
+                  placeholder="…tai liitä kuvan URL"
+                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <p className="text-xs text-zinc-400">
+                  ℹ️ Instagram vaatii aina kuvan. Facebook toimii myös pelkällä tekstillä.
+                </p>
 
-            {/* Esikatselu — miltä postaus näyttää kanavalla */}
-            {(newPost.content || newPost.image_url) && (
-              <div className="mb-4">
-                <p className="text-xs font-medium text-zinc-500 mb-2">Esikatselu</p>
-                <div className="space-y-2">
-                  {(newPost.platform === "both" || newPost.platform === "facebook") && (
-                    <div className="border border-zinc-200 rounded-xl overflow-hidden">
-                      <div className="flex items-center gap-2 p-2.5">
-                        <span className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
-                          <Share2 className="w-3.5 h-3.5 text-white" />
-                        </span>
-                        <span className="text-sm font-medium text-zinc-900">{fbAccount?.page_name || "Facebook-sivu"}</span>
-                      </div>
-                      {newPost.content && <p className="px-2.5 pb-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {newPost.image_url && <img src={newPost.image_url} alt="" className="w-full max-h-64 object-cover" />}
-                    </div>
-                  )}
-                  {(newPost.platform === "both" || newPost.platform === "instagram") && (
-                    <div className="border border-zinc-200 rounded-xl overflow-hidden">
-                      <div className="flex items-center gap-2 p-2.5">
-                        <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-rose-500 flex items-center justify-center">
-                          <Camera className="w-3.5 h-3.5 text-white" />
-                        </span>
-                        <span className="text-sm font-medium text-zinc-900">@{igAccount?.account_name || "instagram"}</span>
-                      </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {newPost.image_url ? (
-                        <img src={newPost.image_url} alt="" className="w-full max-h-64 object-cover" />
-                      ) : (
-                        <div className="bg-zinc-50 text-center py-6 text-xs text-zinc-400">Instagram vaatii kuvan</div>
-                      )}
-                      {newPost.content && <p className="px-2.5 py-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
-                    </div>
-                  )}
+                <div>
+                  <p className="text-xs font-medium text-zinc-500 mb-2">Kanavat</p>
+                  <div className="flex gap-2">
+                    {["both", "facebook", "instagram"].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setNewPost((prev) => ({ ...prev, platform: p }))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          newPost.platform === p
+                            ? "bg-rose-500 text-white"
+                            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {p === "both" ? "Molemmat" : p === "facebook" ? "Facebook" : "Instagram"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div className="flex gap-3">
+              {/* Oikealla: esikatselu */}
+              <div>
+                <p className="text-xs font-medium text-zinc-500 mb-2">Esikatselu</p>
+                {!newPost.content && !newPost.image_url ? (
+                  <div className="border border-dashed border-zinc-200 rounded-xl p-8 text-center text-sm text-zinc-400">
+                    Kirjoita tekstiä tai lisää kuva nähdäksesi esikatselun
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(newPost.platform === "both" || newPost.platform === "facebook") && (
+                      <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                        <div className="flex items-center gap-2 p-2.5">
+                          <span className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                            <Share2 className="w-3.5 h-3.5 text-white" />
+                          </span>
+                          <span className="text-sm font-medium text-zinc-900">{fbAccount?.page_name || "Facebook-sivu"}</span>
+                        </div>
+                        {newPost.content && <p className="px-2.5 pb-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {newPost.image_url && <img src={newPost.image_url} alt="" className="w-full max-h-72 object-cover" />}
+                      </div>
+                    )}
+                    {(newPost.platform === "both" || newPost.platform === "instagram") && (
+                      <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                        <div className="flex items-center gap-2 p-2.5">
+                          <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-rose-500 flex items-center justify-center">
+                            <Camera className="w-3.5 h-3.5 text-white" />
+                          </span>
+                          <span className="text-sm font-medium text-zinc-900">@{igAccount?.account_name || "instagram"}</span>
+                        </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {newPost.image_url ? (
+                          <img src={newPost.image_url} alt="" className="w-full max-h-72 object-cover" />
+                        ) : (
+                          <div className="bg-zinc-50 text-center py-6 text-xs text-zinc-400">Instagram vaatii kuvan</div>
+                        )}
+                        {newPost.content && <p className="px-2.5 py-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Alapalkki — napit aina näkyvissä */}
+            <div className="flex gap-3 px-6 py-4 border-t border-zinc-100 shrink-0">
               <button
                 onClick={() => setShowNewPost(false)}
                 className="flex-1 py-2.5 border border-zinc-200 rounded-xl text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
