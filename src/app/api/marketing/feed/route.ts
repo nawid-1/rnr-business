@@ -10,6 +10,9 @@ type FeedItem = {
   created_time: string;
   image: string | null;
   permalink: string | null;
+  likes: number | null;
+  comments: number | null;
+  media_type: string | null;
 };
 
 // GET: hakee oikeat julkaisut suoraan some-kanavilta (Facebook-sivu + Instagram).
@@ -34,11 +37,15 @@ export async function GET() {
             created_time: p.created_time,
             image: p.full_picture || null,
             permalink: p.permalink_url || null,
+            // Facebookin per-julkaisu tykkäykset/kommentit vaativat App Review'n → null.
+            likes: null,
+            comments: null,
+            media_type: null,
           });
         }
       } else if (acc.platform === "instagram") {
         const res = await fetch(
-          `https://graph.instagram.com/v21.0/${acc.account_id}/media?fields=id,caption,timestamp,media_url,permalink,media_type&limit=25&access_token=${acc.access_token}`
+          `https://graph.instagram.com/v21.0/${acc.account_id}/media?fields=id,caption,timestamp,media_url,permalink,media_type,like_count,comments_count&limit=25&access_token=${acc.access_token}`
         );
         const data = await res.json();
         for (const m of data.data || []) {
@@ -49,6 +56,9 @@ export async function GET() {
             created_time: m.timestamp,
             image: m.media_url || null,
             permalink: m.permalink || null,
+            likes: m.like_count ?? null,
+            comments: m.comments_count ?? null,
+            media_type: m.media_type || null,
           });
         }
       }

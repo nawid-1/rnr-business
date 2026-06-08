@@ -38,6 +38,9 @@ type FeedItem = {
   created_time: string;
   image: string | null;
   permalink: string | null;
+  likes: number | null;
+  comments: number | null;
+  media_type: string | null;
 };
 
 type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
@@ -364,6 +367,16 @@ export default function MarkkinointiPage() {
                           <p className="text-sm text-zinc-700 truncate">
                             {item.message || "(ei tekstiä)"}
                           </p>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="flex items-center gap-1 text-xs text-zinc-400">
+                              <Heart className="w-3 h-3" />
+                              {item.likes ?? "–"}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-zinc-400">
+                              <MessageSquare className="w-3 h-3" />
+                              {item.comments ?? "–"}
+                            </span>
+                          </div>
                         </div>
                       </a>
                     );
