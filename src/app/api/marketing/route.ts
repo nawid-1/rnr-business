@@ -85,6 +85,37 @@ export async function POST(request: Request) {
     }
   }
 
+  if (body.action === "edit_post") {
+    await supabase
+      .from("posts")
+      .update({ content: body.content, image_url: body.image_url || null })
+      .eq("id", body.postId);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === "delete_post") {
+    await supabase.from("posts").delete().eq("id", body.postId);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === "duplicate_post") {
+    const { data: src } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("id", body.postId)
+      .single();
+    if (src) {
+      await supabase.from("posts").insert({
+        social_account_id: src.social_account_id,
+        platform: src.platform,
+        content: src.content,
+        image_url: src.image_url,
+        status: "draft",
+      });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
   if (body.action === "mark_read") {
     await supabase.from("messages").update({ is_read: true }).eq("id", body.messageId);
     return NextResponse.json({ ok: true });

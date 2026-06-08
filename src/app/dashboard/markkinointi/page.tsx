@@ -17,6 +17,8 @@ import {
   AlertCircle,
   Sparkles,
   Trash2,
+  Pencil,
+  Copy,
 } from "lucide-react";
 import type { SocialAccount, Post, Message } from "@/lib/supabase";
 
@@ -88,9 +90,41 @@ export default function MarkkinointiPage() {
   }
   const [showNewPost, setShowNewPost] = useState(false);
   const [newPost, setNewPost] = useState({ content: "", platform: "both", image_url: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState("");
   const [publishing, setPublishing] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  function openNewPost() {
+    setEditingId(null);
+    setNewPost({ content: "", platform: "both", image_url: "" });
+    setShowNewPost(true);
+  }
+
+  function openEditPost(post: Post) {
+    setEditingId(post.id);
+    setNewPost({ content: post.content, platform: post.platform, image_url: post.image_url || "" });
+    setShowNewPost(true);
+  }
+
+  async function deletePost(id: string) {
+    if (!confirm("Poistetaanko luonnos?")) return;
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_post", postId: id }),
+    });
+    fetchData();
+  }
+
+  async function duplicatePost(id: string) {
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "duplicate_post", postId: id }),
+    });
+    fetchData();
+  }
 
   async function uploadMedia(file: File) {
     setUploading(true);
@@ -221,7 +255,7 @@ export default function MarkkinointiPage() {
             <RefreshCw className="w-4 h-4 text-zinc-500" />
           </button>
           <button
-            onClick={() => setShowNewPost(true)}
+            onClick={() => openNewPost()}
             className="flex items-center gap-2 bg-rose-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-rose-600 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -350,7 +384,7 @@ export default function MarkkinointiPage() {
                 <p className="text-xs text-zinc-400">Alustalla luodut postaukset, joita ei ole vielä julkaistu</p>
               </div>
               <button
-                onClick={() => setShowNewPost(true)}
+                onClick={() => openNewPost()}
                 className="flex items-center gap-1.5 text-sm text-rose-500 hover:text-rose-600"
               >
                 <Plus className="w-4 h-4" />
@@ -365,7 +399,7 @@ export default function MarkkinointiPage() {
                 <ImageIcon className="w-7 h-7 mx-auto mb-2 opacity-30" />
                 <p className="text-zinc-400 text-sm">Ei luonnoksia</p>
                 <button
-                  onClick={() => setShowNewPost(true)}
+                  onClick={() => openNewPost()}
                   className="mt-3 text-rose-500 text-sm hover:underline"
                 >
                   Luo ensimmäinen postaus
@@ -385,19 +419,33 @@ export default function MarkkinointiPage() {
                             {new Date(post.created_at).toLocaleDateString("fi-FI")}
                           </span>
                         </div>
-                        <p className="text-sm text-zinc-700">{post.content}</p>
-                        {post.image_url && (
-                          <p className="text-xs text-zinc-400 mt-1 truncate">🖼 {post.image_url}</p>
-                        )}
+                        <div className="flex gap-3">
+                          {post.image_url && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={post.image_url} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                          )}
+                          <p className="text-sm text-zinc-700">{post.content}</p>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => publishPost(post.id)}
-                        disabled={publishing === post.id}
-                        className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50 shrink-0"
-                      >
-                        <Send className="w-3 h-3" />
-                        {publishing === post.id ? "Julkaistaan…" : "Julkaise"}
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openEditPost(post)} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-lg hover:bg-zinc-100" title="Muokkaa">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => duplicatePost(post.id)} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-lg hover:bg-zinc-100" title="Kopioi">
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => deletePost(post.id)} className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50" title="Poista">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => publishPost(post.id)}
+                          disabled={publishing === post.id}
+                          className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50 ml-1"
+                        >
+                          <Send className="w-3 h-3" />
+                          {publishing === post.id ? "…" : "Julkaise"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -759,7 +807,7 @@ export default function MarkkinointiPage() {
       {showNewPost && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
-            <h2 className="text-lg font-bold text-zinc-900 mb-4">Uusi postaus</h2>
+            <h2 className="text-lg font-bold text-zinc-900 mb-4">{editingId ? "Muokkaa luonnosta" : "Uusi postaus"}</h2>
 
             {/* AI-avustaja */}
             <div className="mb-4 p-3 bg-rose-50 rounded-lg border border-rose-100">
@@ -855,6 +903,45 @@ export default function MarkkinointiPage() {
               ))}
             </div>
 
+            {/* Esikatselu — miltä postaus näyttää kanavalla */}
+            {(newPost.content || newPost.image_url) && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-zinc-500 mb-2">Esikatselu</p>
+                <div className="space-y-2">
+                  {(newPost.platform === "both" || newPost.platform === "facebook") && (
+                    <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center gap-2 p-2.5">
+                        <span className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                          <Share2 className="w-3.5 h-3.5 text-white" />
+                        </span>
+                        <span className="text-sm font-medium text-zinc-900">{fbAccount?.page_name || "Facebook-sivu"}</span>
+                      </div>
+                      {newPost.content && <p className="px-2.5 pb-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {newPost.image_url && <img src={newPost.image_url} alt="" className="w-full max-h-64 object-cover" />}
+                    </div>
+                  )}
+                  {(newPost.platform === "both" || newPost.platform === "instagram") && (
+                    <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center gap-2 p-2.5">
+                        <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-rose-500 flex items-center justify-center">
+                          <Camera className="w-3.5 h-3.5 text-white" />
+                        </span>
+                        <span className="text-sm font-medium text-zinc-900">@{igAccount?.account_name || "instagram"}</span>
+                      </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {newPost.image_url ? (
+                        <img src={newPost.image_url} alt="" className="w-full max-h-64 object-cover" />
+                      ) : (
+                        <div className="bg-zinc-50 text-center py-6 text-xs text-zinc-400">Instagram vaatii kuvan</div>
+                      )}
+                      {newPost.content && <p className="px-2.5 py-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setShowNewPost(false)}
@@ -865,17 +952,20 @@ export default function MarkkinointiPage() {
               <button
                 onClick={async () => {
                   if (!newPost.content.trim()) return;
+                  const action = editingId ? "edit_post" : "create_post";
                   await fetch("/api/marketing", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      action: "create_post",
+                      action,
+                      postId: editingId,
                       content: newPost.content,
                       platform: newPost.platform,
                       image_url: newPost.image_url,
                     }),
                   });
                   setShowNewPost(false);
+                  setEditingId(null);
                   setNewPost({ content: "", platform: "both", image_url: "" });
                   fetchData();
                   setTab("postaukset");
@@ -883,7 +973,7 @@ export default function MarkkinointiPage() {
                 className="flex-1 py-2.5 bg-rose-500 text-white rounded-xl text-sm hover:bg-rose-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Send className="w-4 h-4" />
-                Tallenna luonnos
+                {editingId ? "Tallenna muutokset" : "Tallenna luonnos"}
               </button>
             </div>
           </div>
