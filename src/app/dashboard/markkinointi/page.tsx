@@ -9,7 +9,6 @@ import {
   BarChart2,
   MessageSquare,
   Send,
-  Eye,
   Heart,
   RefreshCw,
   CheckCircle,
@@ -20,8 +19,14 @@ import {
   Pencil,
   Copy,
   X,
+  Calendar,
+  Lightbulb,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  Wand2,
 } from "lucide-react";
-import type { SocialAccount, Post, Message } from "@/lib/supabase";
+import type { SocialAccount, Post, Message, Idea } from "@/lib/supabase";
 
 type AnalyticsRow = {
   id: string;
@@ -47,7 +52,12 @@ type FeedItem = {
   media_type: string | null;
 };
 
-type Tab = "kanavat" | "postaukset" | "viestit" | "analytiikka";
+type Tab = "kanavat" | "postaukset" | "kalenteri" | "ideat" | "viestit" | "analytiikka";
+
+// Palauttaa päivän postaukset (scheduled_at tai published_at)
+function getPostDate(post: Post): string | null {
+  return post.scheduled_at || post.published_at || null;
+}
 
 export default function MarkkinointiPage() {
   const [tab, setTab] = useState<Tab>("kanavat");
@@ -55,6 +65,7 @@ export default function MarkkinointiPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsRow[]>([]);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
   const [loading, setLoading] = useState(true);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
@@ -62,15 +73,20 @@ export default function MarkkinointiPage() {
   const [feedLoaded, setFeedLoaded] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<string>("");
 
+  // Kalenteri
+  const [calendarDate, setCalendarDate] = useState(new Date());
+
+  // Idea-pankki
+  const [newIdeaText, setNewIdeaText] = useState("");
+  const [savingIdea, setSavingIdea] = useState(false);
+
   async function fetchFeed() {
     setFeedLoading(true);
     try {
       const res = await fetch("/api/marketing/feed");
       const data = await res.json();
       setFeedItems(data.items || []);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
     setFeedLoading(false);
     setFeedLoaded(true);
   }
@@ -84,28 +100,127 @@ export default function MarkkinointiPage() {
         body: JSON.stringify({ action: "refresh_analytics" }),
       });
       await fetchData();
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
     setRefreshingAnalytics(false);
   }
+
+  async function fetchIdeas() {
+    try {
+      const res = await fetch("/api/ideas");
+      const data = await res.json();
+      setIdeas(data.ideas || []);
+    } catch { /* ignore */ }
+  }
+
+  async function saveIdea() {
+    if (!newIdeaText.trim()) return;
+    setSavingIdea(true);
+    await fetch("/api/ideas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create_idea", content: newIdeaText }),
+    });
+    setNewIdeaText("");
+    await fetchIdeas();
+    setSavingIdea(false);
+  }
+
+  async function deleteIdea(id: string) {
+    if (!confirm("Poistetaanko idea?")) return;
+    await fetch("/api/ideas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_idea", ideaId: id }),
+    });
+    setIdeas((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  function convertIdeaToPost(idea: Idea) {
+    openNewPost(idea.content);
+    setTab("postaukset");
+  }
+
+  // --- Postaukset ---
   const [showNewPost, setShowNewPost] = useState(false);
-  const [newPost, setNewPost] = useState({ content: "", platform: "both", image_url: "" });
+  const [newPost, setNewPost] = useState({
+    content: "",
+    platform: "both",
+    image_url: "",
+    scheduled_at: "",
+    scheduleMode: "now" as "now" | "schedule",
+    replicate: false,
+    fbContent: "",
+    igContent: "",
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [aiPrompt, setAiPrompt] = useState("");
   const [publishing, setPublishing] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  function openNewPost() {
+  // AI-generointi
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiTone, setAiTone] = useState("ystävällinen");
+  const [aiLoading, setAiLoading] = useState(false);
+
+  function openNewPost(prefillContent?: string) {
     setEditingId(null);
-    setNewPost({ content: "", platform: "both", image_url: "" });
+    setNewPost({
+      content: prefillContent || "",
+      platform: "both",
+      image_url: "",
+      scheduled_at: "",
+      scheduleMode: "now",
+      replicate: false,
+      fbContent: "",
+      igContent: "",
+    });
     setShowNewPost(true);
   }
 
   function openEditPost(post: Post) {
     setEditingId(post.id);
-    setNewPost({ content: post.content, platform: post.platform, image_url: post.image_url || "" });
+    setNewPost({
+      content: post.content,
+      platform: post.platform,
+      image_url: post.image_url || "",
+      scheduled_at: post.scheduled_at
+        ? new Date(post.scheduled_at).toISOString().slice(0, 16)
+        : "",
+      scheduleMode: post.scheduled_at ? "schedule" : "now",
+      replicate: false,
+      fbContent: "",
+      igContent: "",
+    });
     setShowNewPost(true);
+  }
+
+  async function generateAI() {
+    if (!aiPrompt.trim()) return;
+    setAiLoading(true);
+    try {
+      const res = await fetch("/api/marketing/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: aiPrompt,
+          platform: newPost.platform === "both" ? "both" : newPost.platform,
+          tone: aiTone,
+        }),
+      });
+      const data = await res.json();
+      if (data.text) {
+        setNewPost((p) => ({ ...p, content: data.text }));
+        // Jos monistus päällä, täytä myös alustakentät
+        if (newPost.replicate) {
+          setNewPost((p) => ({ ...p, fbContent: data.text, igContent: data.text }));
+        }
+        setAiPrompt("");
+      } else {
+        alert("AI-virhe: " + (data.error || "tuntematon"));
+      }
+    } catch (e) {
+      alert("AI-virhe: " + String(e));
+    }
+    setAiLoading(false);
   }
 
   async function deletePost(id: string) {
@@ -164,20 +279,56 @@ export default function MarkkinointiPage() {
     setPublishing(null);
   }
 
+  async function savePost() {
+    if (!newPost.content.trim() && !newPost.replicate) return;
+    if (newPost.replicate && !newPost.fbContent.trim() && !newPost.igContent.trim()) return;
+
+    const scheduledAt =
+      newPost.scheduleMode === "schedule" && newPost.scheduled_at
+        ? new Date(newPost.scheduled_at).toISOString()
+        : null;
+
+    const action = editingId ? "edit_post" : "create_post";
+
+    const body: Record<string, unknown> = {
+      action,
+      postId: editingId,
+      content: newPost.content,
+      platform: newPost.platform,
+      image_url: newPost.image_url,
+      scheduled_at: scheduledAt,
+    };
+
+    // Monistus: alustakohtaiset sisällöt
+    if (!editingId && newPost.replicate && newPost.platform === "both") {
+      body.platform_content = {
+        facebook: newPost.fbContent || newPost.content,
+        instagram: newPost.igContent || newPost.content,
+      };
+    }
+
+    await fetch("/api/marketing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    setShowNewPost(false);
+    setEditingId(null);
+    fetchData();
+    setTab("postaukset");
+  }
+
   useEffect(() => {
     fetchData();
+    fetchIdeas();
   }, []);
 
-  // Lukitse taustan vieritys kun modaali on auki
   useEffect(() => {
     document.body.style.overflow = showNewPost ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [showNewPost]);
 
-  // Päivitä analytiikka automaattisesti kun välilehti avataan ensimmäisen kerran.
-  // Näin luvut ovat aina tuoreita ilman että käyttäjän tarvitsee klikata mitään.
   const [autoRefreshed, setAutoRefreshed] = useState(false);
   useEffect(() => {
     if (tab === "analytiikka" && !autoRefreshed && accounts.length > 0) {
@@ -199,9 +350,7 @@ export default function MarkkinointiPage() {
       setPosts(data.posts || []);
       setMessages(data.messages || []);
       setAnalytics(data.analytics || []);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
     setLoading(false);
   }
 
@@ -211,13 +360,8 @@ export default function MarkkinointiPage() {
   const unreadMessages = messages.filter((m) => !m.is_read).length;
   const activeChannel = selectedChannel || accounts[0]?.platform || "";
 
-  function connectMeta() {
-    window.location.href = "/api/auth/meta/login";
-  }
-
-  function connectInstagram() {
-    window.location.href = "/api/auth/instagram/login";
-  }
+  function connectMeta() { window.location.href = "/api/auth/meta/login"; }
+  function connectInstagram() { window.location.href = "/api/auth/instagram/login"; }
 
   async function disconnect(platform: "facebook" | "instagram") {
     const name = platform === "facebook" ? "Facebook" : "Instagram";
@@ -227,7 +371,6 @@ export default function MarkkinointiPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "disconnect", platform }),
     });
-    // Poista katkaistun kanavan julkaisut myös feed-listalta heti
     setFeedItems((prev) => prev.filter((i) => i.platform !== platform));
     fetchData();
   }
@@ -247,6 +390,36 @@ export default function MarkkinointiPage() {
     if (status === "failed") return <AlertCircle className="w-4 h-4 text-red-500" />;
     return <ImageIcon className="w-4 h-4 text-zinc-400" />;
   };
+
+  // --- Kalenteri ---
+  function buildCalendarDays(date: Date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1).getDay(); // 0=Su
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Eurooppalainen: viikko alkaa maanantaista
+    const startOffset = (firstDay + 6) % 7;
+    const days: (Date | null)[] = [];
+    for (let i = 0; i < startOffset; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, month, d));
+    return days;
+  }
+
+  function getPostsForDay(day: Date): Post[] {
+    const dayStr = day.toISOString().slice(0, 10);
+    return posts.filter((p) => {
+      const dateStr = getPostDate(p);
+      return dateStr && dateStr.slice(0, 10) === dayStr;
+    });
+  }
+
+  const calendarDays = buildCalendarDays(calendarDate);
+  const today = new Date();
+  const WEEKDAYS = ["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"];
+  const MONTHS = [
+    "Tammikuu", "Helmikuu", "Maaliskuu", "Huhtikuu", "Toukokuu", "Kesäkuu",
+    "Heinäkuu", "Elokuu", "Syyskuu", "Lokakuu", "Marraskuu", "Joulukuu",
+  ];
 
   return (
     <div className="p-8">
@@ -274,8 +447,8 @@ export default function MarkkinointiPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-zinc-100 p-1 rounded-lg w-fit">
-        {(["kanavat", "postaukset", "viestit", "analytiikka"] as Tab[]).map((t) => (
+      <div className="flex gap-1 mb-6 bg-zinc-100 p-1 rounded-lg w-fit flex-wrap">
+        {(["kanavat", "postaukset", "kalenteri", "ideat", "viestit", "analytiikka"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -283,6 +456,8 @@ export default function MarkkinointiPage() {
               tab === t ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
             }`}
           >
+            {t === "kalenteri" && <Calendar className="w-3.5 h-3.5 inline mr-1.5" />}
+            {t === "ideat" && <Lightbulb className="w-3.5 h-3.5 inline mr-1.5" />}
             {t}
             {t === "viestit" && unreadMessages > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">
@@ -385,7 +560,6 @@ export default function MarkkinointiPage() {
       {/* POSTAUKSET */}
       {tab === "postaukset" && (
         <div className="space-y-8">
-          {/* OSIO 1 — Luonnokset & ajastetut (alustalla luodut, ei vielä julkaistut) */}
           <section>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -407,10 +581,7 @@ export default function MarkkinointiPage() {
               <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200">
                 <ImageIcon className="w-7 h-7 mx-auto mb-2 opacity-30" />
                 <p className="text-zinc-400 text-sm">Ei luonnoksia</p>
-                <button
-                  onClick={() => openNewPost()}
-                  className="mt-3 text-rose-500 text-sm hover:underline"
-                >
+                <button onClick={() => openNewPost()} className="mt-3 text-rose-500 text-sm hover:underline">
                   Luo ensimmäinen postaus
                 </button>
               </div>
@@ -420,13 +591,22 @@ export default function MarkkinointiPage() {
                   <div key={post.id} className="bg-white rounded-xl p-5 border border-zinc-100 shadow-sm">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                           {statusIcon(post.status)}
                           <span className="text-xs text-zinc-400 capitalize">{post.platform}</span>
                           <span className="text-xs text-zinc-300">·</span>
                           <span className="text-xs text-zinc-400">
                             {new Date(post.created_at).toLocaleDateString("fi-FI")}
                           </span>
+                          {post.status === "scheduled" && post.scheduled_at && (
+                            <>
+                              <span className="text-xs text-zinc-300">·</span>
+                              <span className="text-xs text-blue-500 font-medium flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Ajastettu: {new Date(post.scheduled_at).toLocaleString("fi-FI", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </>
+                          )}
                         </div>
                         <div className="flex gap-3">
                           {post.image_url && (
@@ -446,14 +626,16 @@ export default function MarkkinointiPage() {
                         <button onClick={() => deletePost(post.id)} className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50" title="Poista">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => publishPost(post.id)}
-                          disabled={publishing === post.id}
-                          className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50 ml-1"
-                        >
-                          <Send className="w-3 h-3" />
-                          {publishing === post.id ? "…" : "Julkaise"}
-                        </button>
+                        {post.status !== "scheduled" && (
+                          <button
+                            onClick={() => publishPost(post.id)}
+                            disabled={publishing === post.id}
+                            className="flex items-center gap-1.5 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-rose-600 transition-colors disabled:opacity-50 ml-1"
+                          >
+                            <Send className="w-3 h-3" />
+                            {publishing === post.id ? "…" : "Julkaise"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -462,13 +644,13 @@ export default function MarkkinointiPage() {
             )}
           </section>
 
-          {/* OSIO 2 — Julkaistut some-kanavilla (haetaan suoraan Facebookista & Instagramista) */}
+          {/* Julkaistut some-kanavilla */}
           {accounts.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h2 className="text-base font-semibold text-zinc-900">Julkaistut some-kanavilla</h2>
-                  <p className="text-xs text-zinc-400">Eritelty kanavittain — seuraa yhdistettyjä kanavia automaattisesti</p>
+                  <p className="text-xs text-zinc-400">Eritelty kanavittain</p>
                 </div>
                 <button
                   onClick={fetchFeed}
@@ -484,7 +666,6 @@ export default function MarkkinointiPage() {
                 <div className="text-center py-8 text-zinc-400 text-sm">Ladataan julkaisuja…</div>
               ) : (
                 <div>
-                  {/* Kanavavalitsin (välilehdet) */}
                   <div className="flex gap-1 mb-4 bg-zinc-100 p-1 rounded-lg w-fit">
                     {accounts.map((acc) => {
                       const isFb = acc.platform === "facebook";
@@ -506,22 +687,17 @@ export default function MarkkinointiPage() {
                     })}
                   </div>
 
-                  {/* Valitun kanavan sisältö */}
                   {(() => {
                     const acc = accounts.find((a) => a.platform === activeChannel);
                     if (!acc) return null;
                     const isFb = acc.platform === "facebook";
                     const channelItems = feedItems.filter((i) => i.platform === activeChannel);
-                    const latest = analytics
-                      .filter((a) => a.platform === activeChannel)
-                      .sort((a, b) => b.date.localeCompare(a.date))[0];
+                    const latest = analytics.filter((a) => a.platform === activeChannel).sort((a, b) => b.date.localeCompare(a.date))[0];
                     const totalLikes = channelItems.reduce((s, i) => s + (i.likes ?? 0), 0);
                     const totalComments = channelItems.reduce((s, i) => s + (i.comments ?? 0), 0);
                     const hasEngagement = channelItems.some((i) => i.likes !== null);
-
                     return (
                       <div>
-                        {/* Tilastot valitulle kanavalle */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                           <div className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm text-center">
                             <p className="text-xl font-bold text-zinc-900">{latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}</p>
@@ -540,8 +716,6 @@ export default function MarkkinointiPage() {
                             <p className="text-xs text-zinc-500 mt-0.5">Kommenttia</p>
                           </div>
                         </div>
-
-                        {/* Julkaisut valitulta kanavalta */}
                         {channelItems.length === 0 ? (
                           <div className="bg-white rounded-xl p-8 text-center border border-dashed border-zinc-200 text-sm text-zinc-400">
                             Ei julkaisuja tällä kanavalla
@@ -549,13 +723,8 @@ export default function MarkkinointiPage() {
                         ) : (
                           <div className="bg-white rounded-xl border border-zinc-100 shadow-sm divide-y divide-zinc-50">
                             {channelItems.map((item) => (
-                              <a
-                                key={item.id}
-                                href={item.permalink || "#"}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-3 p-3 hover:bg-zinc-50 transition-colors first:rounded-t-xl last:rounded-b-xl"
-                              >
+                              <a key={item.id} href={item.permalink || "#"} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-3 hover:bg-zinc-50 transition-colors first:rounded-t-xl last:rounded-b-xl">
                                 {item.image ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={item.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
@@ -568,18 +737,14 @@ export default function MarkkinointiPage() {
                                   <p className="text-xs text-zinc-400 mb-0.5">
                                     {item.created_time ? new Date(item.created_time).toLocaleDateString("fi-FI") : ""}
                                   </p>
-                                  <p className="text-sm text-zinc-700 truncate">
-                                    {item.message || "(ei tekstiä)"}
-                                  </p>
+                                  <p className="text-sm text-zinc-700 truncate">{item.message || "(ei tekstiä)"}</p>
                                 </div>
                                 <div className="flex items-center gap-4 shrink-0 pl-2">
                                   <span className="flex items-center gap-1 text-xs text-zinc-400">
-                                    <Heart className="w-3 h-3" />
-                                    {item.likes ?? "–"}
+                                    <Heart className="w-3 h-3" />{item.likes ?? "–"}
                                   </span>
                                   <span className="flex items-center gap-1 text-xs text-zinc-400">
-                                    <MessageSquare className="w-3 h-3" />
-                                    {item.comments ?? "–"}
+                                    <MessageSquare className="w-3 h-3" />{item.comments ?? "–"}
                                   </span>
                                 </div>
                               </a>
@@ -601,6 +766,167 @@ export default function MarkkinointiPage() {
         </div>
       )}
 
+      {/* KALENTERI */}
+      {tab === "kalenteri" && (
+        <div className="bg-white rounded-xl border border-zinc-100 shadow-sm overflow-hidden">
+          {/* Kalenterin otsikkorivi */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+            <h2 className="text-base font-semibold text-zinc-900">
+              {MONTHS[calendarDate.getMonth()]} {calendarDate.getFullYear()}
+            </h2>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
+                className="p-2 hover:bg-zinc-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setCalendarDate(new Date())}
+                className="px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 rounded-lg transition-colors"
+              >
+                Tänään
+              </button>
+              <button
+                onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
+                className="p-2 hover:bg-zinc-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Viikonpäivät */}
+          <div className="grid grid-cols-7 border-b border-zinc-100">
+            {WEEKDAYS.map((d) => (
+              <div key={d} className="py-2 text-center text-xs font-medium text-zinc-400">{d}</div>
+            ))}
+          </div>
+
+          {/* Päivät */}
+          <div className="grid grid-cols-7">
+            {calendarDays.map((day, i) => {
+              if (!day) return <div key={`empty-${i}`} className="min-h-[90px] border-b border-r border-zinc-50 last:border-r-0" />;
+              const isToday = day.toDateString() === today.toDateString();
+              const dayPosts = getPostsForDay(day);
+              const isPast = day < today && !isToday;
+              return (
+                <div
+                  key={day.toISOString()}
+                  className={`min-h-[90px] p-2 border-b border-r border-zinc-50 last:border-r-0 ${isPast ? "bg-zinc-50/50" : ""}`}
+                >
+                  <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
+                    isToday ? "bg-rose-500 text-white" : "text-zinc-500"
+                  }`}>
+                    {day.getDate()}
+                  </div>
+                  <div className="space-y-0.5">
+                    {dayPosts.map((post) => (
+                      <button
+                        key={post.id}
+                        onClick={() => openEditPost(post)}
+                        className={`w-full text-left text-xs px-1.5 py-0.5 rounded truncate transition-colors ${
+                          post.status === "scheduled"
+                            ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            : post.status === "published"
+                            ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : post.status === "failed"
+                            ? "bg-red-100 text-red-700 hover:bg-red-200"
+                            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                        }`}
+                        title={post.content}
+                      >
+                        <span className="capitalize">{post.platform.slice(0, 2)}</span> {post.content.slice(0, 20)}…
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Legenda */}
+          <div className="flex gap-4 px-6 py-3 border-t border-zinc-100 text-xs text-zinc-500">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-zinc-200" />Luonnos</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-200" />Ajastettu</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-200" />Julkaistu</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-200" />Epäonnistui</span>
+          </div>
+        </div>
+      )}
+
+      {/* IDEA-PANKKI */}
+      {tab === "ideat" && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl p-5 border border-zinc-100 shadow-sm">
+            <h2 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
+              <Lightbulb className="w-4 h-4 text-amber-500" />
+              Uusi idea
+            </h2>
+            <textarea
+              value={newIdeaText}
+              onChange={(e) => setNewIdeaText(e.target.value)}
+              placeholder="Kirjoita idea tähän… esim. 'Kevään hiusmuoti-video', 'Asiakasarvostelu-sarja'"
+              rows={3}
+              className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveIdea();
+              }}
+            />
+            <div className="flex justify-between items-center mt-2">
+              <p className="text-xs text-zinc-400">Ctrl+Enter tallentaa</p>
+              <button
+                onClick={saveIdea}
+                disabled={savingIdea || !newIdeaText.trim()}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                {savingIdea ? "Tallennetaan…" : "Tallenna idea"}
+              </button>
+            </div>
+          </div>
+
+          {ideas.length === 0 ? (
+            <div className="bg-white rounded-xl p-12 text-center border border-dashed border-zinc-200">
+              <Lightbulb className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-zinc-400 text-sm">Ei ideoita vielä</p>
+              <p className="text-zinc-300 text-xs mt-1">Tallenna ideoita ilman julkaisupaineita</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {ideas.map((idea) => (
+                <div key={idea.id} className="bg-white rounded-xl p-4 border border-zinc-100 shadow-sm flex items-start gap-3">
+                  <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-zinc-700 whitespace-pre-wrap">{idea.content}</p>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      {new Date(idea.created_at).toLocaleDateString("fi-FI")}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      onClick={() => convertIdeaToPost(idea)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs hover:bg-rose-100 transition-colors"
+                      title="Muuta postaukseksi"
+                    >
+                      <Send className="w-3 h-3" />
+                      Postaa
+                    </button>
+                    <button
+                      onClick={() => deleteIdea(idea.id)}
+                      className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Poista"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* VIESTIT */}
       {tab === "viestit" && (
         <div className="space-y-3">
@@ -614,8 +940,7 @@ export default function MarkkinointiPage() {
             </div>
           ) : (
             messages.map((msg) => (
-              <div
-                key={msg.id}
+              <div key={msg.id}
                 className={`bg-white rounded-xl p-5 border shadow-sm cursor-pointer transition-colors ${
                   !msg.is_read ? "border-rose-200 bg-rose-50/30" : "border-zinc-100"
                 }`}
@@ -626,9 +951,7 @@ export default function MarkkinointiPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-medium text-zinc-900">{msg.sender_name}</span>
                       <span className="text-xs text-zinc-400 capitalize">{msg.message_type}</span>
-                      {!msg.is_read && (
-                        <span className="w-2 h-2 bg-rose-500 rounded-full" />
-                      )}
+                      {!msg.is_read && <span className="w-2 h-2 bg-rose-500 rounded-full" />}
                     </div>
                     <p className="text-sm text-zinc-600">{msg.content}</p>
                   </div>
@@ -636,11 +959,6 @@ export default function MarkkinointiPage() {
                     {new Date(msg.received_at).toLocaleDateString("fi-FI")}
                   </span>
                 </div>
-                {msg.is_replied && (
-                  <div className="mt-2 pl-3 border-l-2 border-rose-200">
-                    <p className="text-xs text-zinc-400">Vastattu: {msg.reply_content}</p>
-                  </div>
-                )}
               </div>
             ))
           )}
@@ -668,12 +986,9 @@ export default function MarkkinointiPage() {
                 </button>
               </div>
 
-              {/* Seuraajat per kanava */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {accounts.map((acc) => {
-                  const latest = analytics
-                    .filter((a) => a.platform === acc.platform)
-                    .sort((a, b) => b.date.localeCompare(a.date))[0];
+                  const latest = analytics.filter((a) => a.platform === acc.platform).sort((a, b) => b.date.localeCompare(a.date))[0];
                   const isFb = acc.platform === "facebook";
                   return (
                     <div key={acc.id} className="bg-white rounded-xl p-6 shadow-sm border border-zinc-100">
@@ -692,26 +1007,18 @@ export default function MarkkinointiPage() {
                         </span>
                         <span className="text-sm text-zinc-500 mb-1">seuraajaa</span>
                       </div>
-                      {latest && (
-                        <p className="text-xs text-zinc-400 mt-1">
-                          Päivitetty {new Date(latest.date).toLocaleDateString("fi-FI")}
-                        </p>
-                      )}
+                      {latest && <p className="text-xs text-zinc-400 mt-1">Päivitetty {new Date(latest.date).toLocaleDateString("fi-FI")}</p>}
                     </div>
                   );
                 })}
               </div>
 
-              {/* Yhteenveto-luvut */}
               {analytics.length === 0 ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-                  <p className="text-sm text-amber-700">
-                    Klikkaa <strong>Päivitä luvut</strong> hakeaksesi tilastot Metasta.
-                  </p>
+                  <p className="text-sm text-amber-700">Klikkaa <strong>Päivitä luvut</strong> hakeaksesi tilastot Metasta.</p>
                 </div>
               ) : (
                 <>
-                  {/* Sitoutuminen (25 viimeisintä postausta) */}
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Sitoutuminen (25 viimeisintä postausta)</h3>
                     <div className="grid grid-cols-4 gap-4">
@@ -751,8 +1058,6 @@ export default function MarkkinointiPage() {
                       })()}
                     </div>
                   </div>
-
-                  {/* Per-alusta erittely */}
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Erittely alustoittain</h3>
                     <div className="bg-white rounded-xl shadow-sm border border-zinc-100 overflow-hidden">
@@ -769,9 +1074,7 @@ export default function MarkkinointiPage() {
                         </thead>
                         <tbody>
                           {accounts.map((acc) => {
-                            const latest = analytics
-                              .filter((a) => a.platform === acc.platform)
-                              .sort((a, b) => b.date.localeCompare(a.date))[0];
+                            const latest = analytics.filter((a) => a.platform === acc.platform).sort((a, b) => b.date.localeCompare(a.date))[0];
                             const isFb = acc.platform === "facebook";
                             return (
                               <tr key={acc.id} className="border-b border-zinc-50 last:border-0">
@@ -783,21 +1086,11 @@ export default function MarkkinointiPage() {
                                     <span className="font-medium text-zinc-900 capitalize">{acc.platform}</span>
                                   </div>
                                 </td>
-                                <td className="px-5 py-4 text-right font-semibold text-zinc-900">
-                                  {latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}
-                                </td>
-                                <td className="px-5 py-4 text-right text-zinc-600">
-                                  {latest?.media_count != null ? latest.media_count.toLocaleString("fi-FI") : "–"}
-                                </td>
-                                <td className="px-5 py-4 text-right text-rose-500 font-medium">
-                                  {latest?.total_likes != null ? latest.total_likes.toLocaleString("fi-FI") : "–"}
-                                </td>
-                                <td className="px-5 py-4 text-right text-zinc-600">
-                                  {latest?.total_comments != null ? latest.total_comments.toLocaleString("fi-FI") : "–"}
-                                </td>
-                                <td className="px-5 py-4 text-right text-blue-500 font-medium">
-                                  {latest?.total_reach ? latest.total_reach.toLocaleString("fi-FI") : "–"}
-                                </td>
+                                <td className="px-5 py-4 text-right font-semibold text-zinc-900">{latest ? latest.followers_count.toLocaleString("fi-FI") : "–"}</td>
+                                <td className="px-5 py-4 text-right text-zinc-600">{latest?.media_count != null ? latest.media_count.toLocaleString("fi-FI") : "–"}</td>
+                                <td className="px-5 py-4 text-right text-rose-500 font-medium">{latest?.total_likes != null ? latest.total_likes.toLocaleString("fi-FI") : "–"}</td>
+                                <td className="px-5 py-4 text-right text-zinc-600">{latest?.total_comments != null ? latest.total_comments.toLocaleString("fi-FI") : "–"}</td>
+                                <td className="px-5 py-4 text-right text-blue-500 font-medium">{latest?.total_reach ? latest.total_reach.toLocaleString("fi-FI") : "–"}</td>
                               </tr>
                             );
                           })}
@@ -812,7 +1105,7 @@ export default function MarkkinointiPage() {
         </div>
       )}
 
-      {/* Uusi postaus modal — leveä, kaksipalstainen, sisäisesti vierittyvä */}
+      {/* POSTAUS MODAL */}
       {showNewPost && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -830,48 +1123,123 @@ export default function MarkkinointiPage() {
               </button>
             </div>
 
-            {/* Sisältö — kaksi palstaa, vierittyy sisäisesti */}
+            {/* Sisältö */}
             <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Vasemmalla: muokkaus */}
+              {/* Vasen: muokkaus */}
               <div className="space-y-4">
+
                 {/* AI-avustaja */}
-                <div className="p-3 bg-rose-50 rounded-lg border border-rose-100">
+                <div className="p-3 bg-violet-50 rounded-xl border border-violet-100">
                   <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-4 h-4 text-rose-500" />
-                    <span className="text-sm font-medium text-rose-700">AI kirjoittaa puolestasi</span>
+                    <Wand2 className="w-4 h-4 text-violet-500" />
+                    <span className="text-sm font-medium text-violet-700">AI kirjoittaa puolestasi</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-2">
                     <input
                       type="text"
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       placeholder="esim. tarjous hiustenleikkauksesta 20%"
-                      className="flex-1 px-3 py-2 text-sm border border-rose-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300"
+                      className="flex-1 px-3 py-2 text-sm border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
+                      onKeyDown={(e) => { if (e.key === "Enter") generateAI(); }}
                     />
                     <button
-                      onClick={() => {
-                        setNewPost((p) => ({
-                          ...p,
-                          content: `✨ Erikoistarjous! ${aiPrompt} - Varaa aikasi nyt! 📞 Ota yhteyttä tai varaa suoraan verkossa. #RNRSalonki #Kauneus #Hyvinvointi`,
-                        }));
-                        setAiPrompt("");
-                      }}
-                      className="px-3 py-2 bg-rose-500 text-white rounded-lg text-sm hover:bg-rose-600 transition-colors"
+                      onClick={generateAI}
+                      disabled={aiLoading || !aiPrompt.trim()}
+                      className="px-3 py-2 bg-violet-500 text-white rounded-lg text-sm hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                     >
-                      <Sparkles className="w-4 h-4" />
+                      {aiLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      {aiLoading ? "" : "Luo"}
                     </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {["ystävällinen", "ammattimainen", "rento", "innostunut"].map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setAiTone(t)}
+                        className={`px-2 py-1 rounded text-xs transition-colors ${
+                          aiTone === t ? "bg-violet-500 text-white" : "bg-white text-violet-600 border border-violet-200 hover:bg-violet-100"
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <textarea
-                  value={newPost.content}
-                  onChange={(e) => setNewPost((p) => ({ ...p, content: e.target.value }))}
-                  placeholder="Kirjoita postauksen teksti..."
-                  rows={6}
-                  className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
-                />
+                {/* Kanavat + Monistus */}
+                <div>
+                  <p className="text-xs font-medium text-zinc-500 mb-2">Kanavat</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {["both", "facebook", "instagram"].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setNewPost((prev) => ({ ...prev, platform: p }))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          newPost.platform === p ? "bg-rose-500 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {p === "both" ? "Molemmat" : p === "facebook" ? "Facebook" : "Instagram"}
+                      </button>
+                    ))}
+                  </div>
 
-                {/* Median lataus */}
+                  {/* Monistus-toggle — vain kun "Molemmat" valittu ja ei editointia */}
+                  {newPost.platform === "both" && !editingId && (
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newPost.replicate}
+                        onChange={(e) => setNewPost((p) => ({ ...p, replicate: e.target.checked }))}
+                        className="rounded"
+                      />
+                      <span className="text-xs text-zinc-600 flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5" />
+                        Eri teksti eri alustoille (monistus)
+                      </span>
+                    </label>
+                  )}
+                </div>
+
+                {/* Teksti — normaali tai monistus */}
+                {newPost.replicate && newPost.platform === "both" ? (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 mb-1 flex items-center gap-1">
+                        <span className="w-3 h-3 rounded bg-blue-600 inline-block" /> Facebook-teksti
+                      </p>
+                      <textarea
+                        value={newPost.fbContent}
+                        onChange={(e) => setNewPost((p) => ({ ...p, fbContent: e.target.value }))}
+                        placeholder="Pidempi teksti Facebookiin…"
+                        rows={4}
+                        className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 mb-1 flex items-center gap-1">
+                        <span className="w-3 h-3 rounded bg-gradient-to-br from-purple-500 to-rose-500 inline-block" /> Instagram-teksti
+                      </p>
+                      <textarea
+                        value={newPost.igContent}
+                        onChange={(e) => setNewPost((p) => ({ ...p, igContent: e.target.value }))}
+                        placeholder="Lyhyt + emojit + #hashtagit Instagramiin…"
+                        rows={4}
+                        className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-400"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <textarea
+                    value={newPost.content}
+                    onChange={(e) => setNewPost((p) => ({ ...p, content: e.target.value }))}
+                    placeholder="Kirjoita postauksen teksti..."
+                    rows={6}
+                    className="w-full px-4 py-3 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                )}
+
+                {/* Kuva */}
                 {newPost.image_url ? (
                   <div className="relative inline-block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -879,7 +1247,6 @@ export default function MarkkinointiPage() {
                     <button
                       onClick={() => setNewPost((p) => ({ ...p, image_url: "" }))}
                       className="absolute top-2 right-2 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80"
-                      title="Poista kuva"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -888,16 +1255,8 @@ export default function MarkkinointiPage() {
                   <label className={`flex items-center justify-center gap-2 w-full px-4 py-6 border-2 border-dashed rounded-xl text-sm cursor-pointer transition-colors ${uploading ? "opacity-60 cursor-wait" : "border-zinc-200 text-zinc-500 hover:border-rose-300 hover:bg-rose-50/30"}`}>
                     <ImageIcon className="w-5 h-5" />
                     {uploading ? "Ladataan…" : "Lataa kuva tai video"}
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      className="hidden"
-                      disabled={uploading}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) uploadMedia(f);
-                      }}
-                    />
+                    <input type="file" accept="image/*,video/*" className="hidden" disabled={uploading}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMedia(f); }} />
                   </label>
                 )}
 
@@ -908,34 +1267,48 @@ export default function MarkkinointiPage() {
                   placeholder="…tai liitä kuvan URL"
                   className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
-                <p className="text-xs text-zinc-400">
-                  ℹ️ Instagram vaatii aina kuvan. Facebook toimii myös pelkällä tekstillä.
-                </p>
+                <p className="text-xs text-zinc-400">ℹ️ Instagram vaatii aina kuvan. Facebook toimii myös pelkällä tekstillä.</p>
 
-                <div>
-                  <p className="text-xs font-medium text-zinc-500 mb-2">Kanavat</p>
+                {/* Ajastus */}
+                <div className="border border-zinc-100 rounded-xl p-3 space-y-3">
+                  <p className="text-xs font-medium text-zinc-500 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" /> Julkaisuaika
+                  </p>
                   <div className="flex gap-2">
-                    {["both", "facebook", "instagram"].map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => setNewPost((prev) => ({ ...prev, platform: p }))}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                          newPost.platform === p
-                            ? "bg-rose-500 text-white"
-                            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-                        }`}
-                      >
-                        {p === "both" ? "Molemmat" : p === "facebook" ? "Facebook" : "Instagram"}
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => setNewPost((p) => ({ ...p, scheduleMode: "now", scheduled_at: "" }))}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        newPost.scheduleMode === "now" ? "bg-rose-500 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                      }`}
+                    >
+                      Julkaise heti
+                    </button>
+                    <button
+                      onClick={() => setNewPost((p) => ({ ...p, scheduleMode: "schedule" }))}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        newPost.scheduleMode === "schedule" ? "bg-blue-500 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                      }`}
+                    >
+                      <Clock className="w-3 h-3 inline mr-1" />
+                      Ajasta
+                    </button>
                   </div>
+                  {newPost.scheduleMode === "schedule" && (
+                    <input
+                      type="datetime-local"
+                      value={newPost.scheduled_at}
+                      onChange={(e) => setNewPost((p) => ({ ...p, scheduled_at: e.target.value }))}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                  )}
                 </div>
               </div>
 
-              {/* Oikealla: esikatselu */}
+              {/* Oikea: esikatselu */}
               <div>
                 <p className="text-xs font-medium text-zinc-500 mb-2">Esikatselu</p>
-                {!newPost.content && !newPost.image_url ? (
+                {!newPost.content && !newPost.image_url && !newPost.fbContent && !newPost.igContent ? (
                   <div className="border border-dashed border-zinc-200 rounded-xl p-8 text-center text-sm text-zinc-400">
                     Kirjoita tekstiä tai lisää kuva nähdäksesi esikatselun
                   </div>
@@ -949,7 +1322,11 @@ export default function MarkkinointiPage() {
                           </span>
                           <span className="text-sm font-medium text-zinc-900">{fbAccount?.page_name || "Facebook-sivu"}</span>
                         </div>
-                        {newPost.content && <p className="px-2.5 pb-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
+                        {(newPost.replicate ? newPost.fbContent : newPost.content) && (
+                          <p className="px-2.5 pb-2 text-sm text-zinc-700 whitespace-pre-wrap">
+                            {newPost.replicate ? newPost.fbContent : newPost.content}
+                          </p>
+                        )}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         {newPost.image_url && <img src={newPost.image_url} alt="" className="w-full max-h-72 object-cover" />}
                       </div>
@@ -962,13 +1339,23 @@ export default function MarkkinointiPage() {
                           </span>
                           <span className="text-sm font-medium text-zinc-900">@{igAccount?.account_name || "instagram"}</span>
                         </div>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         {newPost.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={newPost.image_url} alt="" className="w-full max-h-72 object-cover" />
                         ) : (
                           <div className="bg-zinc-50 text-center py-6 text-xs text-zinc-400">Instagram vaatii kuvan</div>
                         )}
-                        {newPost.content && <p className="px-2.5 py-2 text-sm text-zinc-700 whitespace-pre-wrap">{newPost.content}</p>}
+                        {(newPost.replicate ? newPost.igContent : newPost.content) && (
+                          <p className="px-2.5 py-2 text-sm text-zinc-700 whitespace-pre-wrap">
+                            {newPost.replicate ? newPost.igContent : newPost.content}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {newPost.scheduleMode === "schedule" && newPost.scheduled_at && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-600">
+                        <Clock className="w-3.5 h-3.5" />
+                        Ajastettu: {new Date(newPost.scheduled_at).toLocaleString("fi-FI")}
                       </div>
                     )}
                   </div>
@@ -976,7 +1363,7 @@ export default function MarkkinointiPage() {
               </div>
             </div>
 
-            {/* Alapalkki — napit aina näkyvissä */}
+            {/* Alapalkki */}
             <div className="flex gap-3 px-6 py-4 border-t border-zinc-100 shrink-0">
               <button
                 onClick={() => setShowNewPost(false)}
@@ -985,30 +1372,19 @@ export default function MarkkinointiPage() {
                 Peruuta
               </button>
               <button
-                onClick={async () => {
-                  if (!newPost.content.trim()) return;
-                  const action = editingId ? "edit_post" : "create_post";
-                  await fetch("/api/marketing", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action,
-                      postId: editingId,
-                      content: newPost.content,
-                      platform: newPost.platform,
-                      image_url: newPost.image_url,
-                    }),
-                  });
-                  setShowNewPost(false);
-                  setEditingId(null);
-                  setNewPost({ content: "", platform: "both", image_url: "" });
-                  fetchData();
-                  setTab("postaukset");
-                }}
-                className="flex-1 py-2.5 bg-rose-500 text-white rounded-xl text-sm hover:bg-rose-600 transition-colors flex items-center justify-center gap-2"
+                onClick={savePost}
+                disabled={
+                  newPost.replicate
+                    ? !newPost.fbContent.trim() && !newPost.igContent.trim()
+                    : !newPost.content.trim()
+                }
+                className="flex-1 py-2.5 bg-rose-500 text-white rounded-xl text-sm hover:bg-rose-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Send className="w-4 h-4" />
-                {editingId ? "Tallenna muutokset" : "Tallenna luonnos"}
+                {newPost.scheduleMode === "schedule" ? (
+                  <><Clock className="w-4 h-4" />Ajasta postaus</>
+                ) : (
+                  <><Send className="w-4 h-4" />{editingId ? "Tallenna muutokset" : "Tallenna luonnos"}</>
+                )}
               </button>
             </div>
           </div>

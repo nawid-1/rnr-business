@@ -16,6 +16,7 @@ Selitykset:
 Koodissa käytetyt muuttujat (päivittyy automaattisesti):
 
 <!-- AUTO:env-vars -->
+- `ANTHROPIC_API_KEY`
 - `INSTAGRAM_APP_ID`
 - `INSTAGRAM_APP_SECRET`
 - `META_APP_ID`

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { publishToPlatform } from "@/lib/publishing";
+import type { AccountRow } from "@/lib/publishing";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +10,7 @@ export async function GET() {
   const [{ data: accounts }, { data: posts }, { data: messages }, { data: analytics }] =
     await Promise.all([
       supabase.from("social_accounts").select("*").order("created_at", { ascending: false }),
-      supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(20),
+      supabase.from("posts").select("*").order("created_at", { ascending: false }).limit(50),
       supabase.from("messages").select("*").order("received_at", { ascending: false }).limit(30),
       supabase.from("analytics").select("*").order("date", { ascending: false }).limit(60),
     ]);
@@ -31,14 +33,21 @@ export async function POST(request: Request) {
 
     const { data: accounts } = await supabase.from("social_accounts").select("*");
 
+    const scheduledAt = body.scheduled_at || null;
+    const status = scheduledAt ? "scheduled" : "draft";
+
     for (const platform of platforms) {
       const account = accounts?.find((a) => a.platform === platform);
+      // Jos monistus eri alustoille, käytetään alustakohtaista sisältöä jos annettu
+      const content =
+        body.platform_content?.[platform] || body.content;
       await supabase.from("posts").insert({
         social_account_id: account?.id || null,
         platform,
-        content: body.content,
+        content,
         image_url: body.image_url || null,
-        status: "draft",
+        status,
+        scheduled_at: scheduledAt,
       });
     }
     return NextResponse.json({ ok: true });
@@ -69,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const result = await publishToPlatform(post, account);
+      const result = await publishToPlatform(post, account as AccountRow);
       await supabase
         .from("posts")
         .update({
@@ -86,10 +95,16 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "edit_post") {
-    await supabase
-      .from("posts")
-      .update({ content: body.content, image_url: body.image_url || null })
-      .eq("id", body.postId);
+    const scheduledAt = body.scheduled_at !== undefined ? body.scheduled_at : undefined;
+    const updateData: Record<string, unknown> = {
+      content: body.content,
+      image_url: body.image_url || null,
+    };
+    if (scheduledAt !== undefined) {
+      updateData.scheduled_at = scheduledAt || null;
+      updateData.status = scheduledAt ? "scheduled" : "draft";
+    }
+    await supabase.from("posts").update(updateData).eq("id", body.postId);
     return NextResponse.json({ ok: true });
   }
 
@@ -122,7 +137,6 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "disconnect") {
-    // Poistetaan kanavan yhteys (platform: "facebook" tai "instagram")
     await supabase.from("social_accounts").delete().eq("platform", body.platform);
     return NextResponse.json({ ok: true });
   }
@@ -155,7 +169,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Päivitä julkaistujen postausten tykkäykset/kommentit
     const { data: published } = await supabase
       .from("posts")
       .select("*")
@@ -196,7 +209,6 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     const pageId = account.page_id || account.account_id;
     const token = account.access_token;
 
-    // Hae seuraajat
     const pageRes = await fetch(
       `https://graph.facebook.com/v18.0/${pageId}?fields=followers_count,fan_count&access_token=${token}`
     );
@@ -204,10 +216,6 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     if (pageData.error) throw new Error(pageData.error.message);
     const followers = pageData.followers_count ?? pageData.fan_count ?? 0;
 
-    // Tykkäykset, kommentit ja julkaisumäärä: yritetään hakea sivun julkaisut
-    // engagement-tiedoilla. Tämä vaatii pages_read_engagement-luvan, joka TOIMII
-    // kehitystilassa omalle sivulle tuoreella tokenilla. Jos lupa puuttuu,
-    // jätetään null → UI näyttää "–" (ei harhaanjohtavaa nollaa).
     let totalLikes: number | null = null;
     let totalComments: number | null = null;
     let mediaCount: number | null = null;
@@ -229,7 +237,6 @@ async function fetchAccountStats(account: AccountRow): Promise<{
       }
     } catch { /* lupa puuttuu → jätetään null */ }
 
-    // Hae sivun reach (viimeiset 28 päivää) — vaatii page_impressions permission
     let reach = 0;
     let impressions = 0;
     try {
@@ -261,7 +268,6 @@ async function fetchAccountStats(account: AccountRow): Promise<{
   const followers = profileData.followers_count ?? 0;
   const mediaCount = profileData.media_count ?? 0;
 
-  // Hae viimeisimmät mediat ja laske tykkäykset/kommentit
   const mediaRes = await fetch(
     `https://graph.instagram.com/v21.0/${igId}/media?fields=like_count,comments_count&limit=25&access_token=${token}`
   );
@@ -273,7 +279,6 @@ async function fetchAccountStats(account: AccountRow): Promise<{
     totalComments += m.comments_count ?? 0;
   }
 
-  // Hae reach/impressions (vaatii instagram_insights permission)
   let reach = 0;
   let impressions = 0;
   try {
@@ -308,92 +313,10 @@ async function fetchPostStats(
       comments: data.comments?.summary?.total_count ?? 0,
     };
   }
-  // Instagram media
   const res = await fetch(
     `https://graph.instagram.com/v21.0/${post.platform_post_id}?fields=like_count,comments_count&access_token=${account.access_token}`
   );
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return { likes: data.like_count ?? 0, comments: data.comments_count ?? 0 };
-}
-
-// --- Julkaisu some-kanaviin ---
-
-type PostRow = {
-  id: string;
-  platform: string;
-  content: string;
-  image_url: string | null;
-};
-
-type AccountRow = {
-  platform: string;
-  account_id: string;
-  page_id: string | null;
-  access_token: string;
-};
-
-async function publishToPlatform(post: PostRow, account: AccountRow): Promise<{ id: string }> {
-  if (post.platform === "facebook") {
-    return publishFacebook(post, account);
-  }
-  if (post.platform === "instagram") {
-    return publishInstagram(post, account);
-  }
-  throw new Error(`Tuntematon alusta: ${post.platform}`);
-}
-
-async function publishFacebook(post: PostRow, account: AccountRow): Promise<{ id: string }> {
-  const pageId = account.page_id || account.account_id;
-  const token = account.access_token;
-
-  // Kuvallinen postaus → /photos, muuten /feed
-  if (post.image_url) {
-    const res = await fetch(`https://graph.facebook.com/v18.0/${pageId}/photos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: post.image_url, caption: post.content, access_token: token }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
-    return { id: data.post_id || data.id };
-  }
-
-  const res = await fetch(`https://graph.facebook.com/v18.0/${pageId}/feed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: post.content, access_token: token }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return { id: data.id };
-}
-
-async function publishInstagram(post: PostRow, account: AccountRow): Promise<{ id: string }> {
-  // Instagram VAATII kuvan — pelkkä teksti ei ole mahdollista.
-  if (!post.image_url) {
-    throw new Error("Instagram vaatii kuvan. Lisää kuvan URL postaukseen.");
-  }
-  const igId = account.account_id;
-  const token = account.access_token;
-
-  // Vaihe 1: luo media-kontti
-  const createRes = await fetch(`https://graph.instagram.com/v21.0/${igId}/media`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image_url: post.image_url, caption: post.content, access_token: token }),
-  });
-  const createData = await createRes.json();
-  if (createData.error) throw new Error(createData.error.message);
-  const creationId = createData.id;
-
-  // Vaihe 2: julkaise kontti
-  const publishRes = await fetch(`https://graph.instagram.com/v21.0/${igId}/media_publish`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ creation_id: creationId, access_token: token }),
-  });
-  const publishData = await publishRes.json();
-  if (publishData.error) throw new Error(publishData.error.message);
-  return { id: publishData.id };
 }

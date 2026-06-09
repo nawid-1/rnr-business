@@ -34,6 +34,14 @@ export type Post = {
   created_at: string;
 };
 
+export type Idea = {
+  id: string;
+  content: string;
+  tags: string[];
+  converted_to_post_id: string | null;
+  created_at: string;
+};
+
 export type Message = {
   id: string;
   social_account_id: string;

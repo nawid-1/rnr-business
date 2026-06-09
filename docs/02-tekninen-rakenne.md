@@ -36,7 +36,10 @@ Kaikki **salaiset avaimet ovat palvelimella**, ei selaimessa — tämä on turva
 - `/api/auth/instagram/login`
 - `/api/auth/meta/callback`
 - `/api/auth/meta/login`
+- `/api/cron/publish-scheduled`
 - `/api/cron/refresh-analytics`
+- `/api/ideas`
+- `/api/marketing/ai-generate`
 - `/api/marketing/feed`
 - `/api/marketing`
 - `/api/marketing/upload`
